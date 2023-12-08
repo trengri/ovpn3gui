@@ -1,1 +1,1 @@
-# ovpn3gui
+# OpenVPN3 GUI

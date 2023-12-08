@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=OpenVPN3
+Comment=OpenVPN3
+Exec=/usr/bin/python3 /opt/ovpn3gui/ovpn3gui.py
+Icon=/opt/ovpn3gui/ovpn3gui.png
+Terminal=false
+Type=Application
+Categories=Network;Utility;
+Keywords=OpenVPN VPN
