@@ -263,17 +263,18 @@ class MainWindow(Gtk.Window):
             user = dialog.entry_name.get_text()
             password = dialog.entry_password.get_text()
             otp = dialog.entry_otp.get_text()
-            dialog.destroy()
             if response != Gtk.ResponseType.OK:
                 switch.set_state(False)
+                dialog.destroy()
                 return
             if user != saved_user:
                 self.usernames[switch.config["config_name"]] = user
                 self.save_user_settings()
-            ok, err1, err2 = self.connect_vpn(switch.config, user, password, otp)
+            ok, err1, err2 = self.connect_vpn(switch.config, dialog.entry_password, user, password, otp)
             if not ok:
                 self.display_error(err1, err2)
                 switch.set_state(False)
+            dialog.destroy()
         else:
             state = "off"
             self.disconnect_vpn(switch.config)
@@ -282,7 +283,7 @@ class MainWindow(Gtk.Window):
         self.redraw_win()
 
 
-    def connect_vpn(self, config, user, password, otp):
+    def connect_vpn(self, config, entry, user, password, otp):
         cfg = self.cmgr.Retrieve(config["config_path"])
         session = self.smgr.NewTunnel(cfg)
         print("Session D-Bus path: " + session.GetPath())
@@ -297,6 +298,7 @@ class MainWindow(Gtk.Window):
         # if the backend is not yet ready
         ready = False
         while not ready:
+            entry.progress_pulse()
             try:
                 print("+ Status: " + str(session.GetStatus()))
                 ready = True
@@ -353,22 +355,30 @@ class MainWindow(Gtk.Window):
         print("Wait 15 seconds for the backend to get a connection")
 
         msg = "Connection error"
-        for i in range(1, 16):
-            status = session.GetStatus()
-            if status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_CONNECTED:
-                return True, None, None
-            elif status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_FAILED:
-                msg = "Connection error"
-                break
-            elif status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_AUTH_FAILED:
-                msg = "Authentication error"
-                break
-            print("[%i] Status: %s" % (i, str(session.GetStatus())))
-            time.sleep(1)
+        for i in range(1, 150):
+            if i % 10 == 0:
+                status = session.GetStatus()
+                if status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_CONNECTED:
+                    return True, None, None
+                elif status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_FAILED:
+                    msg = "Connection error"
+                    break
+                elif status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_AUTH_FAILED:
+                    msg = "Authentication error"
+                    break
+                print("[%i] Status: %s" % (i, str(session.GetStatus())))
+            time.sleep(0.1)
+            entry.progress_pulse()
             while Gtk.events_pending():
                 Gtk.main_iteration()
 
-        time.sleep(2)
+        # Wait for a couple of seconds to allow log writer to capture the logs
+        for i in range (0,1):
+            time.sleep(1)
+            entry.progress_pulse()
+            while Gtk.events_pending():
+                Gtk.main_iteration()
+
         session.LogCallback(None)
         session.Disconnect()
         return False, msg, status["message"]
