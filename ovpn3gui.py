@@ -18,8 +18,6 @@ from openvpn3.constants import (
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, GObject, GLib, Gio
 
-usernames = {}
-configs = []
 
 class UserCredDialog(Gtk.Dialog):
     def __init__(self, parent, config, username):
@@ -84,11 +82,15 @@ class EventBoxWithData(Gtk.EventBox):
 class MainWindow(Gtk.Window):
     def __init__(self):
         super().__init__(title="OpenVPN Connect")
+        self.settings_fname = os.path.expanduser("~") + "/.ovpn3gui.json"
+        self.configs = []
+        self.usernames = {}
         self.on_off_lock = threading.Lock()
         self.f_log = None
         self.set_border_width(10)
         self.set_default_size(300, 400)
         self.set_resizable(False)
+        self.load_user_settings()
         self.connect_dbus()
         self.kill_lingering_sessions()
         self.load_connections()
@@ -102,27 +104,28 @@ class MainWindow(Gtk.Window):
         self.smgr = openvpn3.SessionManager(sysbus)
 
     def load_connections(self):
-        global configs
-        configs = [ {"config_name":  c.GetConfigName(),
-                     "config_path":  c.GetPath(),
-                     "session_path": None} for c in self.cmgr.FetchAvailableConfigs()
-                  ]
+        self.configs = [
+            { "config_name":  c.GetConfigName(),
+              "config_path":  c.GetPath(),
+              "session_path": None
+            } for c in self.cmgr.FetchAvailableConfigs()
+        ]
 
         for s in self.smgr.FetchAvailableSessions():
             conf_name = s.GetProperty("config_name")
             conf_path = s.GetProperty("config_path")
             sess_path = s.GetPath()
             attached = False
-            for c in configs:
+            for c in self.configs:
                 if c["config_path"] == conf_path:
                     c["session_path"] = sess_path
                     attached = True
                     break
             if not attached:
                 print("Attaching stale session", conf_name)
-                configs.append({"config_name": conf_name,
-                                "config_path": conf_path,
-                                "session_path": sess_path})
+                self.configs.append({"config_name": conf_name,
+                                     "config_path": conf_path,
+                                     "session_path": sess_path})
 
     def kill_lingering_sessions(self):
         for s in self.smgr.FetchAvailableSessions():
@@ -177,7 +180,7 @@ class MainWindow(Gtk.Window):
         bottom_hbox.pack_end(add_button, False, False, 0)
         self.box_outer.pack_end(bottom_hbox, False, False, 0)
 
-        for c in configs:
+        for c in self.configs:
             row = ListBoxRowWithData(c)
             hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
             row.add(hbox)
@@ -221,7 +224,7 @@ class MainWindow(Gtk.Window):
 
     def get_connection_status(self):
         status = "Disconnected"
-        for c in configs:
+        for c in self.configs:
             path = c["session_path"]
             if path is not None:
                 session = self.smgr.Retrieve(path)
@@ -248,8 +251,8 @@ class MainWindow(Gtk.Window):
         self.connect_dbus()
         if switch.get_active():
             state = "on"
-            if switch.config["config_name"] in usernames:
-                saved_user = usernames[switch.config["config_name"]]
+            if switch.config["config_name"] in self.usernames:
+                saved_user = self.usernames[switch.config["config_name"]]
             else:
                 saved_user = ""
             if not self.ok_to_disconnect():
@@ -265,8 +268,8 @@ class MainWindow(Gtk.Window):
                 switch.set_state(False)
                 return
             if user != saved_user:
-                usernames[switch.config["config_name"]] = user
-                save_user_settings()
+                self.usernames[switch.config["config_name"]] = user
+                self.save_user_settings()
             ok, err1, err2 = self.connect_vpn(switch.config, user, password, otp)
             if not ok:
                 self.display_error(err1, err2)
@@ -458,15 +461,13 @@ class MainWindow(Gtk.Window):
             self.cmgr.Retrieve(config["config_path"]).Remove()
             self.redraw_win()
 
-def load_user_settings():
-    global usernames
-    fname = os.path.expanduser("~") + "/.ovpn3gui.json"
-    if os.path.exists(fname):
-        usernames = json.load(open(fname, encoding="utf-8"))
+    def load_user_settings(self):
+        if os.path.exists(self.settings_fname):
+            self.usernames = json.load(open(self.settings_fname, encoding="utf-8"))
 
-def save_user_settings():
-    fname = os.path.expanduser("~") + "/.ovpn3gui.json"
-    json.dump(usernames, fp=open(fname, 'w', encoding="utf-8"), indent=4)
+    def save_user_settings(self):
+        json.dump(self.usernames, fp=open(self.settings_fname, 'w', encoding="utf-8"), indent=4)
+
 
 def get_gtk_theme_name():
     """Get the name of the currently used GTK theme.
@@ -499,7 +500,6 @@ if __name__ == "__main__":
     dbusloop = DBusGMainLoop(set_as_default=True)
     sysbus = dbus.SystemBus(mainloop=dbusloop)
 
-    load_user_settings()
 
     #set_gtk_theme_name(get_gtk_theme_name())
     #gs = Gio.Settings.new('org.gnome.desktop.interface')
