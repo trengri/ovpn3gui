@@ -26,9 +26,9 @@ class UserCredDialog(Gtk.Dialog):
             Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK
         )
 
-        okButton = self.get_widget_for_response(response_id=Gtk.ResponseType.OK)
-        okButton.set_can_default(True)
-        okButton.grab_default()
+        ok_button = self.get_widget_for_response(response_id=Gtk.ResponseType.OK)
+        ok_button.set_can_default(True)
+        ok_button.grab_default()
 
         self.set_border_width(10)
 #        self.set_default_size(150, 210)
@@ -134,7 +134,7 @@ class MainWindow(Gtk.Window):
                 print("Killing lingering session with status", status)
                 s.Disconnect()
 
-    def ok_to_disconnect(self):
+    def ok_to_disconnect(self) -> bool:
         sessions = self.smgr.FetchAvailableSessions()
         if len(sessions) > 0:
             dialog = Gtk.MessageDialog(
@@ -219,10 +219,10 @@ class MainWindow(Gtk.Window):
         if eb.type == Gdk.EventType.DOUBLE_BUTTON_PRESS:
             print("Double click on", ev.config["config_name"])
 
-    def on_row_activated(self, listbox, row):
+    def on_row_activated(self, listbox: Gtk.ListBox, row: ListBoxRowWithData):
         print(row.config, "activated")
 
-    def get_connection_status(self):
+    def get_connection_status(self) -> str:
         status = "Disconnected"
         for c in self.configs:
             path = c["session_path"]
@@ -236,7 +236,7 @@ class MainWindow(Gtk.Window):
                 break
         return status
 
-    def display_error(self, msg1, msg2):
+    def display_error(self, msg1: str, msg2: str):
         err_dlg = Gtk.MessageDialog(
             transient_for=self,
             message_type=Gtk.MessageType.ERROR,
