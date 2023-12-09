@@ -343,7 +343,7 @@ class MainWindow(Gtk.Window):
                 except dbus.exceptions.DBusException as e:
                     status = session.GetStatus()
                     session.Disconnect()
-                    return False, status["message"], str(e)
+                    return False, status["message"], e.get_dbus_message()
 
                     # Now the while-loop will ensure session.Ready() is re-run
 
