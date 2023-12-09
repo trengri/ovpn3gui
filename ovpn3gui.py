@@ -362,6 +362,8 @@ class MainWindow(Gtk.Window):
                 break
             print("[%i] Status: %s" % (i, str(session.GetStatus())))
             time.sleep(1)
+            while Gtk.events_pending():
+                Gtk.main_iteration()
 
         time.sleep(2)
         session.LogCallback(None)
