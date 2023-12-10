@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import os
+import sys
 import threading
 import time
 import datetime
@@ -79,9 +80,80 @@ class EventBoxWithData(Gtk.EventBox):
         super().__init__()
         self.config = data
 
-class MainWindow(Gtk.Window):
-    def __init__(self):
-        super().__init__(title="OpenVPN Connect")
+def get_gtk_theme_name():
+    """Get the name of the currently used GTK theme.
+    :rtype: str
+    """
+    settings = Gtk.Settings.get_default()
+    return settings.get_property("gtk-theme-name")
+
+def set_gtk_theme_name(gtk_theme_name):
+    """Set the GTK theme to use.
+    :param str gtk_theme_name: The name of the theme to use (e.g.
+                               ``"Adwaita"``).
+    """
+    settings = Gtk.Settings.get_default()
+    settings.set_property("gtk-theme-name", gtk_theme_name)
+
+def set_gtk_application_prefer_dark_theme(use_dark_theme: bool):
+    """Defines whether the dark variant of the GTK theme should be used or
+    not.
+    :param bool use_dark_theme: If ``True`` the dark variant of the theme will
+                                be used (if available).
+    """
+    settings = Gtk.Settings.get_default()
+    settings.set_property("gtk-application-prefer-dark-theme", use_dark_theme)
+
+
+# This would typically be its own file
+MENU_XML = """
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <menu id="app-menu">
+    <section>
+      <item>
+        <attribute name="action">win.import-profile</attribute>
+        <attribute name="label" translatable="yes">Import Profile</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="action">win.dark-mode</attribute>
+        <attribute name="label" translatable="yes">Dark Mode</attribute>
+      </item>
+    </section>
+    <section>
+      <item>
+        <attribute name="action">app.about</attribute>
+        <attribute name="label" translatable="yes">_About</attribute>
+      </item>
+      <item>
+        <attribute name="action">app.quit</attribute>
+        <attribute name="label" translatable="yes">_Quit</attribute>
+        <attribute name="accel">&lt;Primary&gt;q</attribute>
+    </item>
+    </section>
+  </menu>
+</interface>
+"""
+
+
+class AppWindow(Gtk.ApplicationWindow):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        import_profile_action = Gio.SimpleAction.new("import-profile", None)
+        import_profile_action.connect("activate", self.on_import_profile_action)
+        self.add_action(import_profile_action)
+
+        # This will be in the windows group and have the "win" prefix
+        dark_mode_action = Gio.SimpleAction.new_stateful(
+            "dark-mode", None, GLib.Variant.new_boolean(False)
+        )
+        dark_mode_action.connect("change-state", self.on_dark_mode_toggle)
+        self.add_action(dark_mode_action)
+
+        self.set_icon_name("network-transmit-receive")
         self.settings_fname = os.path.expanduser("~") + "/.ovpn3gui.json"
         self.configs = []
         self.usernames = {}
@@ -407,7 +479,7 @@ class MainWindow(Gtk.Window):
             print('%s%s' % (' ' * 33, line))
 
 
-    def on_import_profile_clicked(self, widget):
+    def on_import_profile_clicked(self, widget:Gtk.Button):
         dialog = Gtk.FileChooserDialog(
             title="Import VPN Profile", parent=self, action=Gtk.FileChooserAction.OPEN
         )
@@ -431,14 +503,8 @@ class MainWindow(Gtk.Window):
                 self.display_error("Failed to import profile", "This profile is not valid.")
             self.redraw_win()
 
-    def is_valid_profile(self, filename):
-        return True
-
-    def import_profile(self, filename):
-        fname = os.path.splitext(os.path.basename(filename))[0]
-        with open(filename, 'r', encoding="utf-8") as f:
-            self.cmgr.Import(fname, f.read(), False, True)
-
+    def on_import_profile_action(self, action:Gio.SimpleAction, param):
+        self.on_import_profile_clicked(None)
 
     def add_filters(self, dialog):
         filter_ovpn = Gtk.FileFilter()
@@ -455,6 +521,14 @@ class MainWindow(Gtk.Window):
         filter_any.set_name("Any files")
         filter_any.add_pattern("*")
         dialog.add_filter(filter_any)
+
+    def is_valid_profile(self, filename):
+        return True
+
+    def import_profile(self, filename):
+        fname = os.path.splitext(os.path.basename(filename))[0]
+        with open(filename, 'r', encoding="utf-8") as f:
+            self.cmgr.Import(fname, f.read(), False, True)
 
     def on_delete_profile_clicked(self, button, config):
         dialog = Gtk.MessageDialog(
@@ -478,30 +552,61 @@ class MainWindow(Gtk.Window):
     def save_user_settings(self):
         json.dump(self.usernames, fp=open(self.settings_fname, 'w', encoding="utf-8"), indent=4)
 
+    def on_dark_mode_toggle(self, action: Gio.SimpleAction, value):
+        action.set_state(value)
+        set_gtk_application_prefer_dark_theme(value.get_boolean())
 
-def get_gtk_theme_name():
-    """Get the name of the currently used GTK theme.
-    :rtype: str
-    """
-    settings = Gtk.Settings.get_default()
-    return settings.get_property("gtk-theme-name")
 
-def set_gtk_theme_name(gtk_theme_name):
-    """Set the GTK theme to use.
-    :param str gtk_theme_name: The name of the theme to use (e.g.
-                               ``"Adwaita"``).
-    """
-    settings = Gtk.Settings.get_default()
-    settings.set_property("gtk-theme-name", gtk_theme_name)
+class Application(Gtk.Application):
+    def __init__(self, *args, **kwargs):
+        super().__init__(
+            *args,
+            application_id="ovpn3gui.py",
+            **kwargs
+        )
+        self.window = None
 
-def set_gtk_application_prefer_dark_theme(use_dark_theme):
-    """Defines whether the dark variant of the GTK theme should be used or
-    not.
-    :param bool use_dark_theme: If ``True`` the dark variant of the theme will
-                                be used (if available).
-    """
-    settings = Gtk.Settings.get_default()
-    settings.set_property("gtk-application-prefer-dark-theme", use_dark_theme)
+    def do_startup(self):
+        Gtk.Application.do_startup(self)
+
+        action = Gio.SimpleAction.new("about", None)
+        action.connect("activate", self.on_about)
+        self.add_action(action)
+
+        action = Gio.SimpleAction.new("quit", None)
+        action.connect("activate", self.on_quit)
+        self.add_action(action)
+
+        builder = Gtk.Builder.new_from_string(MENU_XML, -1)
+        self.set_app_menu(builder.get_object("app-menu"))
+
+    def do_activate(self):
+        # We only allow a single window and raise any existing ones
+        if not self.window:
+            # Windows are associated with the application
+            # when the last one is closed the application shuts down
+            self.window = AppWindow(application=self, title="OpenVPN3")
+            self.window.show_all()
+        self.window.present()
+
+    def on_about(self, action, param):
+        about_dialog = Gtk.AboutDialog(transient_for=self.window, modal=True)
+        about_dialog.set_name           ("OpenVPN3 Linux Frontend GTK3 Application")
+        about_dialog.set_version        ("v1.0")
+        about_dialog.set_copyright      ("(c) 2023 trengri")
+        about_dialog.set_comments       ("Inspired by OpenVPN Connect client")
+        about_dialog.set_license        ("GPLv3")
+        about_dialog.set_website        ('https://github.com/trengri/ovpn3gui')
+        about_dialog.set_website_label  ("GitHub")
+        about_dialog.set_authors        (["trengri"])
+        about_dialog.set_documenters    (["Nobody"])
+        about_dialog.set_artists        (["Nobody"])
+        about_dialog.set_logo_icon_name ('network-transmit-receive')
+        about_dialog.set_program_name   ("OpenVPN3 Linux Frontend")
+        about_dialog.present()
+
+    def on_quit(self, action, param):
+        self.quit()
 
 
 if __name__ == "__main__":
@@ -510,13 +615,10 @@ if __name__ == "__main__":
     dbusloop = DBusGMainLoop(set_as_default=True)
     sysbus = dbus.SystemBus(mainloop=dbusloop)
 
-
-    #set_gtk_theme_name(get_gtk_theme_name())
+    set_gtk_theme_name(get_gtk_theme_name())
     #gs = Gio.Settings.new('org.gnome.desktop.interface')
     #if (gs.get_string('color-scheme') == 'prefer-dark'):
     #  set_gtk_application_prefer_dark_theme(True)
 
-    win = MainWindow()
-    win.connect("destroy", Gtk.main_quit)
-    win.show_all()
-    Gtk.main()
+    app = Application()
+    app.run(sys.argv)
