@@ -7,3 +7,4 @@ Terminal=false
 Type=Application
 Categories=Network;Utility;
 Keywords=OpenVPN VPN
+StartupWMClass=ovpn3gui.py
