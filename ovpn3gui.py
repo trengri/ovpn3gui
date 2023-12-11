@@ -2,7 +2,6 @@
 
 import os
 import sys
-import threading
 import time
 import datetime
 import subprocess
@@ -157,7 +156,6 @@ class AppWindow(Gtk.ApplicationWindow):
         self.settings_fname = os.path.expanduser("~") + "/.ovpn3gui.json"
         self.configs = []
         self.usernames = {}
-        self.on_off_lock = threading.Lock()
         self.f_log = None
         self.set_border_width(10)
         self.set_default_size(300, 400)
@@ -325,6 +323,9 @@ class AppWindow(Gtk.ApplicationWindow):
         err_dlg.destroy()
 
     def on_switch_activated(self, switch, gparam):
+        GLib.timeout_add(0, self.do_switch_activated, switch)
+
+    def do_switch_activated(self, switch: SwitchWithData):
         self.idle_counter = 0
         self.connect_dbus()
         if switch.get_active():
