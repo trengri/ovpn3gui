@@ -390,7 +390,8 @@ class AppWindow(Gtk.ApplicationWindow):
 
         # This will run in the background
         with open(os.path.expanduser("~") + "/ovpn3gui.log", "a") as self.f_log:
-            subprocess.Popen(["openvpn3", "log", "--log-level", "6", "--session-path", session.GetPath()], stdout=self.f_log, stderr=self.f_log)
+            subprocess.Popen(["/usr/bin/openvpn3", "log", "--log-level", "6", "--session-path", session.GetPath()],
+                             stdout=self.f_log, stderr=self.f_log)
 
         # Start the VPN connection
         ready = False
