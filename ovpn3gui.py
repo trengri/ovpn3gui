@@ -141,7 +141,7 @@ MENU_XML = """
 class AppWindow(Gtk.ApplicationWindow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
+        self.application = kwargs["application"]
         import_profile_action = Gio.SimpleAction.new("import-profile", None)
         import_profile_action.connect("activate", self.on_import_profile_action)
         self.add_action(import_profile_action)
@@ -169,6 +169,9 @@ class AppWindow(Gtk.ApplicationWindow):
 #        Gtk.Settings.get_default().connect("notify::gtk-theme-name", self._on_theme_name_changed)
 #        Gtk.Settings.get_default().connect("notify::gtk-application-prefer-dark-theme", self._on_theme_name_changed)
         self.draw_win()
+        self.idle_counter = 0
+        # Increment idle counter every minute
+        self.timeout_id = GLib.timeout_add_seconds(60, self.auto_exit, None)
 
     # Connect to the configuration and session manager
     def connect_dbus(self):
@@ -288,10 +291,12 @@ class AppWindow(Gtk.ApplicationWindow):
         listbox.show_all()
 
     def vpn_profile_button_press(self, ev: EventBoxWithData, eb: Gdk.EventButton):
+        self.idle_counter = 0
         if eb.type == Gdk.EventType.DOUBLE_BUTTON_PRESS:
             print("Double click on", ev.config["config_name"])
 
     def on_row_activated(self, listbox: Gtk.ListBox, row: ListBoxRowWithData):
+        self.idle_counter = 0
         print(row.config, "activated")
 
     def get_connection_status(self) -> str:
@@ -320,6 +325,7 @@ class AppWindow(Gtk.ApplicationWindow):
         err_dlg.destroy()
 
     def on_switch_activated(self, switch, gparam):
+        self.idle_counter = 0
         self.connect_dbus()
         if switch.get_active():
             state = "on"
@@ -445,7 +451,7 @@ class AppWindow(Gtk.ApplicationWindow):
                 Gtk.main_iteration()
 
         # Wait for a couple of seconds to allow log writer to capture the logs
-        for i in range (0,1):
+        for i in range (0, 1):
             time.sleep(1)
             entry.progress_pulse()
             while Gtk.events_pending():
@@ -480,6 +486,7 @@ class AppWindow(Gtk.ApplicationWindow):
 
 
     def on_import_profile_clicked(self, widget:Gtk.Button):
+        self.idle_counter = 0
         dialog = Gtk.FileChooserDialog(
             title="Import VPN Profile", parent=self, action=Gtk.FileChooserAction.OPEN
         )
@@ -531,6 +538,7 @@ class AppWindow(Gtk.ApplicationWindow):
             self.cmgr.Import(fname, f.read(), False, True)
 
     def on_delete_profile_clicked(self, button, config):
+        self.idle_counter = 0
         dialog = Gtk.MessageDialog(
             transient_for=self,
             message_type=Gtk.MessageType.QUESTION,
@@ -545,6 +553,13 @@ class AppWindow(Gtk.ApplicationWindow):
             self.cmgr.Retrieve(config["config_path"]).Remove()
             self.redraw_win()
 
+    def auto_exit(self, user_data) -> bool:
+        """ Automatically quit the application after 15 minutes of inactivity. """
+        self.idle_counter += 1
+        if self.idle_counter > 15:
+            self.application.quit()
+        return True
+
     def load_user_settings(self):
         if os.path.exists(self.settings_fname):
             self.usernames = json.load(open(self.settings_fname, encoding="utf-8"))
@@ -553,6 +568,7 @@ class AppWindow(Gtk.ApplicationWindow):
         json.dump(self.usernames, fp=open(self.settings_fname, 'w', encoding="utf-8"), indent=4)
 
     def on_dark_mode_toggle(self, action: Gio.SimpleAction, value):
+        self.idle_counter = 0
         action.set_state(value)
         set_gtk_application_prefer_dark_theme(value.get_boolean())
 
