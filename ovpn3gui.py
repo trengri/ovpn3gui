@@ -18,6 +18,7 @@ from openvpn3.constants import (
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, GObject, GLib, Gio
 
+MAX_LOG_SIZE = 10*1024*1024        # 10MB
 
 class UserCredDialog(Gtk.Dialog):
     def __init__(self, parent, config, username):
@@ -153,7 +154,9 @@ class AppWindow(Gtk.ApplicationWindow):
         self.add_action(dark_mode_action)
 
         self.set_icon_name("network-transmit-receive")
-        self.settings_fname = os.path.expanduser("~") + "/.ovpn3gui.json"
+        home_dir = os.path.expanduser("~")
+        self.log_filename = home_dir + "/ovpn3gui.log"
+        self.settings_filename = home_dir + "/.ovpn3gui.json"
         self.configs = []
         self.usernames = {}
         self.f_log = None
@@ -164,6 +167,7 @@ class AppWindow(Gtk.ApplicationWindow):
         self.connect_dbus()
         self.kill_lingering_sessions()
         self.load_connections()
+        self.rotate_log()
 #        Gtk.Settings.get_default().connect("notify::gtk-theme-name", self._on_theme_name_changed)
 #        Gtk.Settings.get_default().connect("notify::gtk-application-prefer-dark-theme", self._on_theme_name_changed)
         self.draw_win()
@@ -486,6 +490,11 @@ class AppWindow(Gtk.ApplicationWindow):
         for line in loglines[1:]:
             print('%s%s' % (' ' * 33, line))
 
+    def rotate_log(self):
+        if os.path.exists(self.log_filename):
+            file_stat = os.stat(self.log_filename)
+            if file_stat.st_size > MAX_LOG_SIZE:
+                os.rename(self.log_filename, self.log_filename + '.old')
 
     def on_import_profile_clicked(self, widget:Gtk.Button):
         self.idle_counter = 0
@@ -563,11 +572,11 @@ class AppWindow(Gtk.ApplicationWindow):
         return True
 
     def load_user_settings(self):
-        if os.path.exists(self.settings_fname):
-            self.usernames = json.load(open(self.settings_fname, encoding="utf-8"))
+        if os.path.exists(self.settings_filename):
+            self.usernames = json.load(open(self.settings_filename, encoding="utf-8"))
 
     def save_user_settings(self):
-        json.dump(self.usernames, fp=open(self.settings_fname, 'w', encoding="utf-8"), indent=4)
+        json.dump(self.usernames, fp=open(self.settings_filename, 'w', encoding="utf-8"), indent=4)
 
     def on_dark_mode_toggle(self, action: Gio.SimpleAction, value):
         self.idle_counter = 0
