@@ -11,8 +11,8 @@
 ![изображение](https://github.com/trengri/ovpn3gui/assets/53753844/116bcfa7-fa21-4e48-b22a-0071ce771719)
 
 ## Installation
-1. Install [OpenVPN3Linux](https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux)
-2. Enter the following commands:
+1. Install pre-requisite: [OpenVPN3Linux](https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux). There are prebuilt packages available for main distributions.
+2. Install this front-end:
    ```
    git clone https://github.com/trengri/ovpn3gui.git
    cd ovpn3gui
