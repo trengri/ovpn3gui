@@ -8,7 +8,7 @@
 
 ## Screenshots
 ![изображение](https://github.com/trengri/ovpn3gui/assets/53753844/c9dc85e2-c57e-45fc-bb53-b7a23b77cd82)
-![изображение](https://github.com/trengri/ovpn3gui/assets/53753844/8673a61b-ef51-4e78-9e0a-7249d4568475)
+![изображение](https://github.com/trengri/ovpn3gui/assets/53753844/116bcfa7-fa21-4e48-b22a-0071ce771719)
 
 ## Installation
 1. Install [OpenVPN3Linux](https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux).
