@@ -13,5 +13,6 @@
 
 
 ## Installation
-Copy `ovpn3gui.py` and `ovpn3gui.png` files to `/opt/ovpn3gui` or any other directory (make sure to edit `ovpn3gui.desktop` file if using another directory).
-Put `ovpn3gui.desktop` file to `/usr/share/applications`.
+1. Install [OpenVPN3Linux](https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux).
+2. Copy `ovpn3gui.py` and `ovpn3gui.png` files to `/opt/ovpn3gui` or any other directory.
+3. Put `ovpn3gui.desktop` file to `/usr/share/applications`. Make to edit it to match the directory from step 2.
