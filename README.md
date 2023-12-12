@@ -7,10 +7,8 @@
 * Uses OpenVPN3 frontend API instead of calling `openvpn3 session-start`, `openvpn3 config-import` programs
 
 ## Screenshots
-![изображение](https://github.com/trengri/ovpn3gui/assets/53753844/98d0c017-3177-4e8b-91ae-b8701916b641)
-![изображение](https://github.com/trengri/ovpn3gui/assets/53753844/8f57fb91-e8cb-46bd-b133-6b99d8f5506c)
-
-
+![изображение](https://github.com/trengri/ovpn3gui/assets/53753844/c9dc85e2-c57e-45fc-bb53-b7a23b77cd82)
+![изображение](https://github.com/trengri/ovpn3gui/assets/53753844/8673a61b-ef51-4e78-9e0a-7249d4568475)
 
 ## Installation
 1. Install [OpenVPN3Linux](https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux).
