@@ -315,7 +315,7 @@ class AppWindow(Gtk.ApplicationWindow):
         err_dlg = Gtk.MessageDialog(
             transient_for=self,
             message_type=Gtk.MessageType.ERROR,
-            buttons=Gtk.ButtonsType.CANCEL,
+            buttons=Gtk.ButtonsType.OK,
             text=msg1,
         )
         err_dlg.format_secondary_text(msg2)
