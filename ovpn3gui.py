@@ -32,12 +32,9 @@ class UserCredDialog(Gtk.Dialog):
         ok_button.grab_default()
 
         self.set_border_width(10)
-#        self.set_default_size(150, 210)
-
 
         box = self.get_content_area()
         box.set_spacing(15)
-#        box.set_border_width(10)
 
         label_name = Gtk.Label(label="User name:", xalign=0)
         label_password = Gtk.Label(label="Passsword:", xalign=0)
@@ -45,15 +42,14 @@ class UserCredDialog(Gtk.Dialog):
 
         self.entry_name = Gtk.Entry()
         self.entry_password = Gtk.Entry()
+        self.entry_password.set_visibility(False)
         self.entry_otp = Gtk.Entry()
         self.entry_otp.set_activates_default(True)
 
-        self.entry_password.set_visibility(False)
-
         grid = Gtk.Grid(column_homogeneous=False, column_spacing=50, row_spacing=10)
-        grid.attach(label_name,     0, 0, 1, 1)
-        grid.attach(label_password, 0, 1, 1, 1)
-        grid.attach(label_otp,      0, 2, 1, 1)
+        grid.attach(label_name,          0, 0, 1, 1)
+        grid.attach(label_password,      0, 1, 1, 1)
+        grid.attach(label_otp,           0, 2, 1, 1)
         grid.attach(self.entry_name,     1, 0, 1, 1)
         grid.attach(self.entry_password, 1, 1, 1, 1)
         grid.attach(self.entry_otp,      1, 2, 1, 1)
@@ -326,6 +322,18 @@ class AppWindow(Gtk.ApplicationWindow):
         err_dlg.run()
         err_dlg.destroy()
 
+    def new_spinner(self, text: str) -> Gtk.MessageDialog:
+        spinner_window = Gtk.MessageDialog(transient_for = self,
+                                           modal=True,
+                                           destroy_with_parent=True,
+                                           text = text)
+        box_content_area = spinner_window.get_content_area()
+        spinner = Gtk.Spinner()
+        box_content_area.add(spinner)
+        spinner.start()
+        spinner_window.show_all()
+        return spinner_window
+
     def on_switch_activated(self, switch, gparam):
         GLib.timeout_add(0, self.do_switch_activated, switch)
 
@@ -333,7 +341,6 @@ class AppWindow(Gtk.ApplicationWindow):
         self.idle_counter = 0
         self.connect_dbus()
         if switch.get_active():
-            state = "on"
             if switch.config["config_name"] in self.usernames:
                 saved_user = self.usernames[switch.config["config_name"]]
             else:
@@ -346,33 +353,38 @@ class AppWindow(Gtk.ApplicationWindow):
             user = dialog.entry_name.get_text()
             password = dialog.entry_password.get_text()
             otp = dialog.entry_otp.get_text()
+            dialog.destroy()
+
             if response != Gtk.ResponseType.OK:
                 switch.set_state(False)
-                dialog.destroy()
                 return
             if user != saved_user:
                 self.usernames[switch.config["config_name"]] = user
                 self.save_user_settings()
-            ok, err1, err2 = self.connect_vpn(switch.config, dialog.entry_password, user, password, otp)
+
+            spinner = self.new_spinner("Connecting to " + switch.config["config_name"] + "...")
+            ok, err_msg = self.connect_vpn(switch.config, user, password, otp)
+            spinner.destroy()
+
             if not ok:
-                self.display_error(err1, err2)
+                self.display_error("Error connecting to " + switch.config["config_name"], err_msg)
                 switch.set_state(False)
-            dialog.destroy()
         else:
-            state = "off"
             self.disconnect_vpn(switch.config)
 
-        print(f"Switch was turned {state} for", switch.config["config_name"])
+#        print(f"Switch was turned {switch.get_active()} for", switch.config["config_name"])
         self.redraw_win()
 
-
-    def connect_vpn(self, config, entry, user, password, otp):
+    def connect_vpn(self, config, user, password, otp):
+        while Gtk.events_pending():
+            Gtk.main_iteration()
         cfg = self.cmgr.Retrieve(config["config_path"])
         session = self.smgr.NewTunnel(cfg)
         print("Session D-Bus path: " + session.GetPath())
+        while Gtk.events_pending():
+            Gtk.main_iteration()
 
-
-         # Set up signal callback handlers and the proper log level
+#        Set up signal callback handlers and the proper log level
 #        session.LogCallback(self._LogHandler)
 #        self.__session.StatusChangeCallback(self._StatusHandler)
 
@@ -381,36 +393,37 @@ class AppWindow(Gtk.ApplicationWindow):
         # if the backend is not yet ready
         ready = False
         while not ready:
-            entry.progress_pulse()
+            while Gtk.events_pending():
+                Gtk.main_iteration()
             try:
                 print("+ Status: " + str(session.GetStatus()))
                 ready = True
             except dbus.exceptions.DBusException:
                 # If no status is available yet, wait and retry
                 time.sleep(1)
+                while Gtk.events_pending():
+                    Gtk.main_iteration()
         print("Starting connection...")
 
-#        session.SetProperty('log_verbosity', dbus.UInt32(6))
-
         # This will run in the background
-        with open(os.path.expanduser("~") + "/ovpn3gui.log", "a") as self.f_log:
+        with open(self.log_filename, "a") as self.f_log:
             subprocess.Popen(["/usr/bin/openvpn3", "log", "--log-level", "6", "--session-path", session.GetPath()],
                              stdout=self.f_log, stderr=self.f_log)
 
         # Start the VPN connection
         ready = False
-        while not ready:
+        error_msg = None
+        while not ready and not error_msg:
             try:
                 # Is the backend ready to connect?  If not an exception is thrown
                 session.Ready()
                 session.Connect()
                 ready = True
             except dbus.exceptions.DBusException as e:
-                print("Caught exception", e, str(e))
-                # If this is not about user credentials missing, re-throw the exception
+                # If this is not about user credentials missing, exit the loop
                 if str(e).find(' Missing user credentials') < 1:
-                    raise e
-
+                    error_msg = e.get_dbus_message()
+                    break
                 try:
                     # Query the user for all information the backend has requested
                     for u in session.FetchUserInputSlots():
@@ -418,62 +431,80 @@ class AppWindow(Gtk.ApplicationWindow):
                         if u.GetTypeGroup()[0] != openvpn3.ClientAttentionType.CREDENTIALS:
                             continue
 
-#                      print("input slot:", u)
-
                         # Query the user for the information and
                         # send it back to the backend
                         varname = u.GetVariableName()
                         if varname == "username":
-                            u.ProvideInput(user)
+                            if user:
+                                u.ProvideInput(user)
+                            else:
+                                error_msg = "Username is required, but it was not provided."
                         elif varname == "password":
-                            u.ProvideInput(password)
+                            if password:
+                                u.ProvideInput(password)
+                            else:
+                                error_msg = "Password is required, but it was not provided."
                         elif varname == "static_challenge":
-                            u.ProvideInput(otp)
-                except dbus.exceptions.DBusException as e:
+                            if otp:
+                                u.ProvideInput(otp)
+                            else:
+                                error_msg = "OTP Code is required, but it was not provided."
+                except dbus.exceptions.DBusException as e2:
+                    error_msg = e2.get_dbus_message()
+            # Now the while-loop will ensure session.Ready() is re-run
+
+        if not error_msg:
+            print("Wait 15 seconds for the backend to get a connection")
+            for i in range(1, 150):
+                if i % 10 == 0:
                     status = session.GetStatus()
-                    session.Disconnect()
-                    return False, status["message"], e.get_dbus_message()
-
-                    # Now the while-loop will ensure session.Ready() is re-run
-
-        print("Wait 15 seconds for the backend to get a connection")
-
-        msg = "Connection error"
-        for i in range(1, 150):
-            if i % 10 == 0:
+                    if status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_CONNECTED:
+                        return True, None
+                    if status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_FAILED:
+                        error_msg = "Failed to start the connection"
+                        if status["message"]: error_msg += "\n" + status["message"]
+                        break
+                    if status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_AUTH_FAILED:
+                        error_msg = "Authentication failed"
+                        break
+                    print("[%i] Status: %s" % (i, str(session.GetStatus())))
+                time.sleep(0.1)
+                while Gtk.events_pending():
+                    Gtk.main_iteration()
+            else:
                 status = session.GetStatus()
-                if status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_CONNECTED:
-                    return True, None, None
-                elif status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_FAILED:
-                    msg = "Connection error"
-                    break
-                elif status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_AUTH_FAILED:
-                    msg = "Authentication error"
-                    break
-                print("[%i] Status: %s" % (i, str(session.GetStatus())))
-            time.sleep(0.1)
-            entry.progress_pulse()
+                error_msg = "Connection timed out.\n" + str(status["major"]) + "\n" + str(status["minor"])
+                if status["message"]:
+                    error_msg += "\nMessage: " + status["message"]
+
+        # If we are here, we failed to establish a VPN session.
+        # Wait for a couple of seconds before terminating the session
+        # to allow log writer to capture the logs
+        for i in range (0, 10):
+            time.sleep(0.2)
             while Gtk.events_pending():
                 Gtk.main_iteration()
 
-        # Wait for a couple of seconds to allow log writer to capture the logs
-        for i in range (0, 1):
-            time.sleep(1)
-            entry.progress_pulse()
-            while Gtk.events_pending():
-                Gtk.main_iteration()
+        # Perform cleanup
+        # Session manager is still trying to establish the session in the background
+        # So we need to explicitly terminate it
+        # Unfortunately, sometimes OpenVPN3 v21 segfaults here :(
+        try:
+            session.Disconnect()
+        except Exception as e:
+            self.display_error("Fatal error",
+                              "Unexpected error occurred. This is typically caused by backend error,\n"
+                              "such as openvpn3 daemon segfault. Please check system log for details.\n"
+                              "Session data may be inconsistent, the application will exit now.")
+            exit(1)
 
-        session.LogCallback(None)
-        session.Disconnect()
-        return False, msg, status["message"]
+        return False, error_msg
 
     def disconnect_vpn(self, config):
         s_path = config["session_path"]
         if s_path is None:
-#        print("disconnect_vpn() called for a NULL session")
             return
         session = self.smgr.Retrieve(s_path)
-        session.LogCallback(None)
         session.Disconnect()
 
 
