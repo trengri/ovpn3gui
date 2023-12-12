@@ -11,6 +11,18 @@
 ![изображение](https://github.com/trengri/ovpn3gui/assets/53753844/116bcfa7-fa21-4e48-b22a-0071ce771719)
 
 ## Installation
-1. Install [OpenVPN3Linux](https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux).
-2. Copy `ovpn3gui.py` and `ovpn3gui.png` files to `/opt/ovpn3gui` or any other directory.
-3. Put `ovpn3gui.desktop` file to `/usr/share/applications`. Make sure to edit it to match the directory from step 2.
+1. Install [OpenVPN3Linux](https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux)
+2. Enter the following commands:
+   ```
+   git clone https://github.com/trengri/ovpn3gui.git
+   cd ovpn3gui
+   make install
+   ```
+## Usage
+Launch OpenVPN3 icon from GNOME
+
+## Uninstall
+   ```
+   cd ovpn3gui
+   make uninstall
+   ```
