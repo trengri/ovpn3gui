@@ -138,18 +138,32 @@ class AppWindow(Gtk.ApplicationWindow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.application = kwargs["application"]
+
+        # This will be in the windows group and have the "win" prefix
         import_profile_action = Gio.SimpleAction.new("import-profile", None)
         import_profile_action.connect("activate", self.on_import_profile_action)
         self.add_action(import_profile_action)
 
-        # This will be in the windows group and have the "win" prefix
         dark_mode_action = Gio.SimpleAction.new_stateful(
             "dark-mode", None, GLib.Variant.new_boolean(False)
         )
         dark_mode_action.connect("change-state", self.on_dark_mode_toggle)
         self.add_action(dark_mode_action)
 
-        self.set_icon_name("network-transmit-receive")
+        hb = Gtk.HeaderBar()
+        hb.set_show_close_button(True)
+        hb.props.title = "OpenVPN3"
+        self.set_titlebar(hb)
+
+        button = Gtk.MenuButton()
+        image = Gtk.Image.new_from_icon_name("open-menu-symbolic", Gtk.IconSize.MENU)
+        button.add(image)
+
+        builder = Gtk.Builder.new_from_string(MENU_XML, -1)
+        button.set_menu_model(builder.get_object("app-menu"))
+
+        hb.pack_start(button)
+
         home_dir = os.path.expanduser("~")
         self.log_filename = home_dir + "/ovpn3gui.log"
         self.settings_filename = home_dir + "/.ovpn3gui.json"
@@ -231,9 +245,9 @@ class AppWindow(Gtk.ApplicationWindow):
 
     def redraw_win(self):
         self.load_connections()
-        self.remove(self.box_outer)
-        for k in self.get_children():
+        for k in self.box_outer.get_children():
             k.destroy()
+        self.remove(self.box_outer)
         self.draw_win()
         self.show_all()
 
@@ -634,9 +648,6 @@ class Application(Gtk.Application):
         action = Gio.SimpleAction.new("quit", None)
         action.connect("activate", self.on_quit)
         self.add_action(action)
-
-        builder = Gtk.Builder.new_from_string(MENU_XML, -1)
-        self.set_app_menu(builder.get_object("app-menu"))
 
     def do_activate(self):
         # We only allow a single window and raise any existing ones
