@@ -16,7 +16,7 @@ from openvpn3.constants import (
 )
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, Gdk, GObject, GLib, Gio
+from gi.repository import Gtk, Gdk, GLib, Gio
 
 MAX_LOG_SIZE = 5*1024*1024        # 5MB
 
@@ -293,7 +293,7 @@ class AppWindow(Gtk.ApplicationWindow):
         self.box_outer.pack_start(listbox, True, True, 0)
 
         label_status = Gtk.Label(label=self.get_connection_status(), xalign=0)
-        add_button = Gtk.Button.new_from_icon_name("list-add-symbolic", 4)
+        add_button = Gtk.Button.new_from_icon_name("list-add-symbolic", Gtk.IconSize.BUTTON)
         add_button.connect("clicked", self.on_import_profile_clicked)
         bottom_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
         bottom_hbox.pack_start(label_status, False, False, 0)
@@ -323,7 +323,7 @@ class AppWindow(Gtk.ApplicationWindow):
             vbox.pack_start(label1, True, True, 0)
             vbox.pack_start(label2, True, True, 0)
 
-            button = Gtk.Button.new_from_icon_name("list-remove-symbolic", 1)
+            button = Gtk.Button.new_from_icon_name("list-remove-symbolic", Gtk.IconSize.BUTTON)
             button.connect("clicked", self.on_delete_profile_clicked, c)
             hbox.pack_start(button, False, False, 0)
 

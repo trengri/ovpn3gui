@@ -12,7 +12,7 @@
 
 ## Installation
 1. Install pre-requisite: [OpenVPN3Linux](https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux). There are prebuilt packages available for main distributions.
-2. Install this front-end:
+2. Install this frontend:
    ```
    git clone https://github.com/trengri/ovpn3gui.git
    cd ovpn3gui
