@@ -78,7 +78,7 @@ class TextFileWindow(Gtk.Window):
         self.add(scrolled_window)
         self.connect("key_press_event", self.check_escape)
 
-    def check_escape(self, window: Gtk.Window, event: Gdk.EventKey):
+    def check_escape(self, _window: Gtk.Window, event: Gdk.EventKey):
         if event.keyval == Gdk.KEY_Escape:
             self.destroy()
 
@@ -273,7 +273,7 @@ class AppWindow(Gtk.ApplicationWindow):
         return True
 
     @staticmethod
-    def _on_theme_name_changed(settings, gparam):
+    def _on_theme_name_changed(settings, _gparam):
         print("Theme name:", settings.get_property("gtk-theme-name"))
 
     def redraw_win(self):
@@ -342,7 +342,7 @@ class AppWindow(Gtk.ApplicationWindow):
         if eb.type == Gdk.EventType.DOUBLE_BUTTON_PRESS:
             self.show_config(ev.config)
 
-    def on_row_activated(self, listbox: Gtk.ListBox, row: ListBoxRowWithData):
+    def on_row_activated(self, _listbox: Gtk.ListBox, row: ListBoxRowWithData):
         self.idle_counter = 0
         print(row.config, "activated")
 
@@ -372,7 +372,7 @@ class AppWindow(Gtk.ApplicationWindow):
         spinner_window.show_all()
         return spinner_window
 
-    def on_switch_activated(self, switch, gparam):
+    def on_switch_activated(self, switch, _gparam):
         GLib.timeout_add(0, self.do_switch_activated, switch)
 
     def do_switch_activated(self, switch: SwitchWithData):
@@ -530,7 +530,7 @@ class AppWindow(Gtk.ApplicationWindow):
         # Unfortunately, sometimes OpenVPN3 v21 segfaults here :(
         try:
             session.Disconnect()
-        except Exception as e:
+        except Exception as _e:
             display_error(self, "Fatal error",
                               "Unexpected error occurred. This is typically caused by backend error,\n"
                               "such as openvpn3 daemon segfault. Please check system log for details.\n"
@@ -551,7 +551,7 @@ class AppWindow(Gtk.ApplicationWindow):
     #  Simple Log signal callback function.  Called each time a Log event
     #  happens on this session.
     #
-    def _LogHandler(self, group, catg, msg):
+    def _LogHandler(self, _group, _catg, msg):
         loglines = [l for l in msg.split('\n') if len(l) > 0]
         if len(loglines) < 1:
             return
@@ -561,7 +561,7 @@ class AppWindow(Gtk.ApplicationWindow):
             print('%s%s' % (' ' * 33, line))
 
 
-    def on_import_profile_clicked(self, widget:Gtk.Button):
+    def on_import_profile_clicked(self, _widget:Gtk.Button):
         self.idle_counter = 0
         dialog = Gtk.FileChooserDialog(
             title="Import VPN Profile", parent=self, action=Gtk.FileChooserAction.OPEN
@@ -586,7 +586,7 @@ class AppWindow(Gtk.ApplicationWindow):
                 display_error(self, "Failed to import profile", "This profile is not valid.")
             self.redraw_win()
 
-    def on_import_profile_action(self, action:Gio.SimpleAction, param):
+    def on_import_profile_action(self, _action:Gio.SimpleAction, _param):
         self.on_import_profile_clicked(None)
 
     def add_filters(self, dialog):
@@ -605,7 +605,7 @@ class AppWindow(Gtk.ApplicationWindow):
         filter_any.add_pattern("*")
         dialog.add_filter(filter_any)
 
-    def is_valid_profile(self, filename):
+    def is_valid_profile(self, _filename):
         return True
 
     def import_profile(self, filename):
@@ -613,7 +613,7 @@ class AppWindow(Gtk.ApplicationWindow):
         with open(filename, 'r', encoding="utf-8") as f:
             self.cmgr.Import(fname, f.read(), False, True)
 
-    def on_delete_profile_clicked(self, button, config):
+    def on_delete_profile_clicked(self, _button, config):
         self.idle_counter = 0
         dialog = Gtk.MessageDialog(
             transient_for=self,
@@ -629,7 +629,7 @@ class AppWindow(Gtk.ApplicationWindow):
             self.cmgr.Retrieve(config["config_path"]).Remove()
             self.redraw_win()
 
-    def auto_exit(self, user_data) -> bool:
+    def auto_exit(self, _user_data) -> bool:
         """ Automatically quit the application after 15 minutes of inactivity. """
         self.idle_counter += 1
         if self.idle_counter > 15:
@@ -692,7 +692,7 @@ class Application(Gtk.Application):
             if file_stat.st_size > MAX_LOG_SIZE:
                 os.rename(self.log_filename, self.log_filename + '.old')
 
-    def on_view_log(self, action, param):
+    def on_view_log(self, _action, _param):
         log = None
         if os.path.exists(self.log_filename):
             log = self.log_filename
@@ -715,7 +715,7 @@ class Application(Gtk.Application):
             self.window.show_all()
         self.window.present()
 
-    def on_about(self, action, param):
+    def on_about(self, _action, _param):
         about_dialog = Gtk.AboutDialog(transient_for=self.window, modal=True)
         about_dialog.set_name           ("OpenVPN3 Linux Frontend GTK3 Application")
         about_dialog.set_version        ("v1.0")
@@ -731,7 +731,7 @@ class Application(Gtk.Application):
         about_dialog.set_program_name   ("OpenVPN3 Linux Frontend")
         about_dialog.present()
 
-    def on_quit(self, action, param):
+    def on_quit(self, _action, _param):
         self.quit()
 
 
