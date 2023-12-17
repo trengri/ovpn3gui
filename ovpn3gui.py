@@ -329,8 +329,6 @@ class AppWindow(Gtk.ApplicationWindow):
 
             listbox.add(row)
 
-        row = Gtk.ListBoxRow()
-        listbox.add(row)
 #        listbox.connect('row-activated', self.on_row_activated)
         listbox.show_all()
 
