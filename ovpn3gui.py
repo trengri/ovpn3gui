@@ -18,7 +18,7 @@ from openvpn3.constants import (
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, GObject, GLib, Gio
 
-MAX_LOG_SIZE = 10*1024*1024        # 10MB
+MAX_LOG_SIZE = 5*1024*1024        # 5MB
 
 class UserCredDialog(Gtk.Dialog):
     def __init__(self, parent, config, username):
@@ -97,6 +97,17 @@ class EventBoxWithData(Gtk.EventBox):
         super().__init__()
         self.config = data
 
+def display_error(parent: Gtk.Window, msg1: str, msg2: str):
+    err_dlg = Gtk.MessageDialog(
+        transient_for=parent,
+        message_type=Gtk.MessageType.ERROR,
+        buttons=Gtk.ButtonsType.OK,
+        text=msg1
+    )
+    err_dlg.format_secondary_text(msg2)
+    err_dlg.run()
+    err_dlg.destroy()
+
 def get_gtk_theme_name():
     """Get the name of the currently used GTK theme.
     :rtype: str
@@ -132,18 +143,25 @@ MENU_XML = """
         <attribute name="action">win.import-profile</attribute>
         <attribute name="label" translatable="yes">Import Profile</attribute>
       </item>
-    </section>
-    <section>
-      <item>
-        <attribute name="action">win.dark-mode</attribute>
-        <attribute name="label" translatable="yes">Dark Mode</attribute>
-      </item>
-    </section>
-    <section>
       <item>
         <attribute name="action">app.view-log</attribute>
         <attribute name="label" translatable="yes">View _Log</attribute>
       </item>
+    </section>
+    <section>
+      <attribute name="label" translatable="yes">Theme</attribute>
+      <item>
+        <attribute name="action">app.change-theme</attribute>
+        <attribute name="target">light</attribute>
+        <attribute name="label" translatable="yes">Light style</attribute>
+      </item>
+      <item>
+        <attribute name="action">app.change-theme</attribute>
+        <attribute name="target">dark</attribute>
+        <attribute name="label" translatable="yes">Dark style</attribute>
+      </item>
+    </section>
+    <section>
       <item>
         <attribute name="action">app.about</attribute>
         <attribute name="label" translatable="yes">_About</attribute>
@@ -168,12 +186,6 @@ class AppWindow(Gtk.ApplicationWindow):
         import_profile_action = Gio.SimpleAction.new("import-profile", None)
         import_profile_action.connect("activate", self.on_import_profile_action)
         self.add_action(import_profile_action)
-
-        dark_mode_action = Gio.SimpleAction.new_stateful(
-            "dark-mode", None, GLib.Variant.new_boolean(False)
-        )
-        dark_mode_action.connect("change-state", self.on_dark_mode_toggle)
-        self.add_action(dark_mode_action)
 
         hb = Gtk.HeaderBar()
         hb.set_show_close_button(True)
@@ -350,17 +362,6 @@ class AppWindow(Gtk.ApplicationWindow):
                 break
         return status
 
-    def display_error(self, msg1: str, msg2: str):
-        err_dlg = Gtk.MessageDialog(
-            transient_for=self,
-            message_type=Gtk.MessageType.ERROR,
-            buttons=Gtk.ButtonsType.OK,
-            text=msg1,
-        )
-        err_dlg.format_secondary_text(msg2)
-        err_dlg.run()
-        err_dlg.destroy()
-
     def new_spinner(self, text: str) -> Gtk.MessageDialog:
         spinner_window = Gtk.MessageDialog(transient_for = self,
                                            modal=True,
@@ -406,7 +407,7 @@ class AppWindow(Gtk.ApplicationWindow):
             spinner.destroy()
 
             if not ok:
-                self.display_error("Error connecting to " + switch.config["config_name"], err_msg)
+                display_error(self, "Error connecting to " + switch.config["config_name"], err_msg)
                 switch.set_state(False)
         else:
             self.disconnect_vpn(switch.config)
@@ -532,7 +533,7 @@ class AppWindow(Gtk.ApplicationWindow):
         try:
             session.Disconnect()
         except Exception as e:
-            self.display_error("Fatal error",
+            display_error(self, "Fatal error",
                               "Unexpected error occurred. This is typically caused by backend error,\n"
                               "such as openvpn3 daemon segfault. Please check system log for details.\n"
                               "Session data may be inconsistent, the application will exit now.")
@@ -584,7 +585,7 @@ class AppWindow(Gtk.ApplicationWindow):
                 self.connect_dbus()
                 self.import_profile(filename)
             else:
-                self.display_error("Failed to import profile", "This profile is not valid.")
+                display_error(self, "Failed to import profile", "This profile is not valid.")
             self.redraw_win()
 
     def on_import_profile_action(self, action:Gio.SimpleAction, param):
@@ -644,12 +645,6 @@ class AppWindow(Gtk.ApplicationWindow):
     def save_user_settings(self):
         json.dump(self.usernames, fp=open(self.application.settings_filename, 'w', encoding="utf-8"), indent=4)
 
-    def on_dark_mode_toggle(self, action: Gio.SimpleAction, value):
-        self.idle_counter = 0
-        action.set_state(value)
-        set_gtk_application_prefer_dark_theme(value.get_boolean())
-
-
 class Application(Gtk.Application):
     def __init__(self, *args, **kwargs):
         super().__init__(
@@ -677,7 +672,21 @@ class Application(Gtk.Application):
         action.connect("activate", self.on_quit)
         self.add_action(action)
 
+        theme_variant = GLib.Variant.new_string("System default")
+        action = Gio.SimpleAction.new_stateful(
+            "change-theme", theme_variant.get_type(), theme_variant
+        )
+        action.connect("change-state", self.on_change_theme)
+        self.add_action(action)
+
         self.rotate_log()
+
+    def on_change_theme(self, action: Gio.SimpleAction, value: GLib.Variant):
+        action.set_state(value)
+        if value.get_string() == "light":
+            set_gtk_theme_name("Adwaita-light")
+        else:
+            set_gtk_theme_name("Adwaita-dark")
 
     def rotate_log(self):
         if os.path.exists(self.log_filename):
@@ -686,9 +695,18 @@ class Application(Gtk.Application):
                 os.rename(self.log_filename, self.log_filename + '.old')
 
     def on_view_log(self, action, param):
-        with open(self.log_filename, 'r', encoding="utf-8") as f:
-            win = TextFileWindow(self.log_filename, f.read())
-            win.show_all()
+        log = None
+        if os.path.exists(self.log_filename):
+            log = self.log_filename
+        elif os.path.exists(self.log_filename + '.old'):
+            log = self.log_filename + '.old'
+
+        if log:
+            with open(log, 'r', encoding="utf-8") as f:
+                win = TextFileWindow(log, f.read())
+                win.show_all()
+        else:
+            display_error(self.window, "Log is empty", "There are no records in the log yet")
 
     def do_activate(self):
         # We only allow a single window and raise any existing ones
