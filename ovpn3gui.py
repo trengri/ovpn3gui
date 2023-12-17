@@ -61,6 +61,27 @@ class UserCredDialog(Gtk.Dialog):
             self.entry_password.grab_focus()
         self.show_all()
 
+class TextFileWindow(Gtk.Window):
+    def __init__(self, title: str, text: str):
+        super().__init__(title=title)
+
+        tv = Gtk.TextView()
+        tv.set_editable(False)
+        tv.set_monospace(True)
+        tv.get_buffer().set_text(text)
+
+        scrolled_window =  Gtk.ScrolledWindow()
+        scrolled_window.add(tv)
+
+        self.set_border_width(5)
+        self.set_default_size(600, 500)
+        self.add(scrolled_window)
+        self.connect("key_press_event", self.check_escape)
+
+    def check_escape(self, window: Gtk.Window, event: Gdk.EventKey):
+        if event.keyval == Gdk.KEY_Escape:
+            self.destroy()
+
 class SwitchWithData(Gtk.Switch):
     config = GObject.Property(type=object, default=None)
     def __init__(self):
@@ -120,6 +141,10 @@ MENU_XML = """
     </section>
     <section>
       <item>
+        <attribute name="action">app.view-log</attribute>
+        <attribute name="label" translatable="yes">View _Log</attribute>
+      </item>
+      <item>
         <attribute name="action">app.about</attribute>
         <attribute name="label" translatable="yes">_About</attribute>
       </item>
@@ -164,9 +189,6 @@ class AppWindow(Gtk.ApplicationWindow):
 
         hb.pack_start(button)
 
-        home_dir = os.path.expanduser("~")
-        self.log_filename = home_dir + "/ovpn3gui.log"
-        self.settings_filename = home_dir + "/.ovpn3gui.json"
         self.configs = []
         self.usernames = {}
         self.f_log = None
@@ -177,7 +199,6 @@ class AppWindow(Gtk.ApplicationWindow):
         self.connect_dbus()
         self.kill_lingering_sessions()
         self.load_connections()
-        self.rotate_log()
 #        Gtk.Settings.get_default().connect("notify::gtk-theme-name", self._on_theme_name_changed)
 #        Gtk.Settings.get_default().connect("notify::gtk-application-prefer-dark-theme", self._on_theme_name_changed)
         self.draw_win()
@@ -302,10 +323,15 @@ class AppWindow(Gtk.ApplicationWindow):
 #        listbox.connect('row-activated', self.on_row_activated)
         listbox.show_all()
 
+    def show_config(self, config):
+        config_text = self.cmgr.Retrieve(config["config_path"]).Fetch()
+        win = TextFileWindow(title=config["config_name"], text=config_text)
+        win.show_all()
+
     def vpn_profile_button_press(self, ev: EventBoxWithData, eb: Gdk.EventButton):
         self.idle_counter = 0
         if eb.type == Gdk.EventType.DOUBLE_BUTTON_PRESS:
-            print("Double click on", ev.config["config_name"])
+            self.show_config(ev.config)
 
     def on_row_activated(self, listbox: Gtk.ListBox, row: ListBoxRowWithData):
         self.idle_counter = 0
@@ -420,7 +446,7 @@ class AppWindow(Gtk.ApplicationWindow):
         print("Starting connection...")
 
         # This will run in the background
-        with open(self.log_filename, "a") as self.f_log:
+        with open(self.application.log_filename, "a") as self.f_log:
             subprocess.Popen(["/usr/bin/openvpn3", "log", "--log-level", "6", "--session-path", session.GetPath()],
                              stdout=self.f_log, stderr=self.f_log)
 
@@ -476,7 +502,8 @@ class AppWindow(Gtk.ApplicationWindow):
                         return True, None
                     if status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_FAILED:
                         error_msg = "Failed to start the connection"
-                        if status["message"]: error_msg += "\n" + status["message"]
+                        if status["message"]:
+                            error_msg += "\n" + status["message"]
                         break
                     if status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_AUTH_FAILED:
                         error_msg = "Authentication failed"
@@ -510,7 +537,7 @@ class AppWindow(Gtk.ApplicationWindow):
                               "Unexpected error occurred. This is typically caused by backend error,\n"
                               "such as openvpn3 daemon segfault. Please check system log for details.\n"
                               "Session data may be inconsistent, the application will exit now.")
-            exit(1)
+            sys.exit(1)
 
         return False, error_msg
 
@@ -535,11 +562,6 @@ class AppWindow(Gtk.ApplicationWindow):
         for line in loglines[1:]:
             print('%s%s' % (' ' * 33, line))
 
-    def rotate_log(self):
-        if os.path.exists(self.log_filename):
-            file_stat = os.stat(self.log_filename)
-            if file_stat.st_size > MAX_LOG_SIZE:
-                os.rename(self.log_filename, self.log_filename + '.old')
 
     def on_import_profile_clicked(self, widget:Gtk.Button):
         self.idle_counter = 0
@@ -617,11 +639,11 @@ class AppWindow(Gtk.ApplicationWindow):
         return True
 
     def load_user_settings(self):
-        if os.path.exists(self.settings_filename):
-            self.usernames = json.load(open(self.settings_filename, encoding="utf-8"))
+        if os.path.exists(self.application.settings_filename):
+            self.usernames = json.load(open(self.application.settings_filename, encoding="utf-8"))
 
     def save_user_settings(self):
-        json.dump(self.usernames, fp=open(self.settings_filename, 'w', encoding="utf-8"), indent=4)
+        json.dump(self.usernames, fp=open(self.application.settings_filename, 'w', encoding="utf-8"), indent=4)
 
     def on_dark_mode_toggle(self, action: Gio.SimpleAction, value):
         self.idle_counter = 0
@@ -637,6 +659,9 @@ class Application(Gtk.Application):
             **kwargs
         )
         self.window = None
+        home_dir = os.path.expanduser("~")
+        self.settings_filename = home_dir + "/.ovpn3gui.json"
+        self.log_filename = home_dir + "/ovpn3gui.log"
 
     def do_startup(self):
         Gtk.Application.do_startup(self)
@@ -645,9 +670,26 @@ class Application(Gtk.Application):
         action.connect("activate", self.on_about)
         self.add_action(action)
 
+        action = Gio.SimpleAction.new("view-log", None)
+        action.connect("activate", self.on_view_log)
+        self.add_action(action)
+
         action = Gio.SimpleAction.new("quit", None)
         action.connect("activate", self.on_quit)
         self.add_action(action)
+
+        self.rotate_log()
+
+    def rotate_log(self):
+        if os.path.exists(self.log_filename):
+            file_stat = os.stat(self.log_filename)
+            if file_stat.st_size > MAX_LOG_SIZE:
+                os.rename(self.log_filename, self.log_filename + '.old')
+
+    def on_view_log(self, action, param):
+        with open(self.log_filename, 'r', encoding="utf-8") as f:
+            win = TextFileWindow(self.log_filename, f.read())
+            win.show_all()
 
     def do_activate(self):
         # We only allow a single window and raise any existing ones
