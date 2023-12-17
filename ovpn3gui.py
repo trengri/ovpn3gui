@@ -83,9 +83,9 @@ class TextFileWindow(Gtk.Window):
             self.destroy()
 
 class SwitchWithData(Gtk.Switch):
-    config = GObject.Property(type=object, default=None)
-    def __init__(self):
+    def __init__(self, data):
         super().__init__()
+        self.config = data
 
 class ListBoxRowWithData(Gtk.ListBoxRow):
     def __init__(self, data):
@@ -293,10 +293,9 @@ class AppWindow(Gtk.ApplicationWindow):
             hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
             row.add(hbox)
 
-            switch = SwitchWithData()
+            switch = SwitchWithData(c)
             switch.set_active(c["session_path"] is not None)
             switch.connect("notify::active", self.on_switch_activated)
-            switch.config = c
             switch.props.valign = Gtk.Align.CENTER
             hbox.pack_start(switch, False, True, 0)
 
