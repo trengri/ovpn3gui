@@ -638,10 +638,12 @@ class AppWindow(Gtk.ApplicationWindow):
 
     def load_user_settings(self):
         if os.path.exists(self.application.settings_filename):
-            self.usernames = json.load(open(self.application.settings_filename, encoding="utf-8"))
+            with open(self.application.settings_filename, 'r', encoding="utf-8") as f:
+                self.usernames = json.load(f)
 
     def save_user_settings(self):
-        json.dump(self.usernames, fp=open(self.application.settings_filename, 'w', encoding="utf-8"), indent=4)
+        with open(self.application.settings_filename, 'w', encoding="utf-8") as f:
+            json.dump(self.usernames, f, indent=4)
 
 class Application(Gtk.Application):
     def __init__(self, *args, **kwargs):
