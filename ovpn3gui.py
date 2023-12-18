@@ -11,9 +11,7 @@ import dbus
 from dbus.mainloop.glib import DBusGMainLoop
 
 import openvpn3
-from openvpn3.constants import (
-  StatusMajor, StatusMinor, ClientAttentionType, ClientAttentionGroup, SessionManagerEventType
-)
+from openvpn3.constants import StatusMajor, StatusMinor
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, GLib, Gio
@@ -211,8 +209,6 @@ class AppWindow(Gtk.ApplicationWindow):
         self.connect_dbus()
         self.kill_lingering_sessions()
         self.load_connections()
-#        Gtk.Settings.get_default().connect("notify::gtk-theme-name", self._on_theme_name_changed)
-#        Gtk.Settings.get_default().connect("notify::gtk-application-prefer-dark-theme", self._on_theme_name_changed)
         self.draw_win()
         self.idle_counter = 0
         # Increment idle counter every minute
@@ -271,10 +267,6 @@ class AppWindow(Gtk.ApplicationWindow):
             else:
                 return False
         return True
-
-    @staticmethod
-    def _on_theme_name_changed(settings, _gparam):
-        print("Theme name:", settings.get_property("gtk-theme-name"))
 
     def redraw_win(self):
         self.load_connections()
@@ -410,7 +402,7 @@ class AppWindow(Gtk.ApplicationWindow):
         else:
             self.disconnect_vpn(switch.config)
 
-#        print(f"Switch was turned {switch.get_active()} for", switch.config["config_name"])
+#        print(f'Switch was turned {switch.get_active()} for {switch.config["config_name"]}')
         self.redraw_win()
 
     def connect_vpn(self, config, user, password, otp):
@@ -463,14 +455,13 @@ class AppWindow(Gtk.ApplicationWindow):
                     error_msg = e.get_dbus_message()
                     break
                 try:
-                    # Query the user for all information the backend has requested
+                    # Provide credentials to the backend
                     for u in session.FetchUserInputSlots():
                         # We only care about responding to credential requests here
                         if u.GetTypeGroup()[0] != openvpn3.ClientAttentionType.CREDENTIALS:
                             continue
 
-                        # Query the user for the information and
-                        # send it back to the backend
+                        # Send information provided by the user to the backend
                         varname = u.GetVariableName()
                         if varname == "username":
                             if user:
@@ -516,7 +507,7 @@ class AppWindow(Gtk.ApplicationWindow):
                 if status["message"]:
                     error_msg += "\nMessage: " + status["message"]
 
-        # If we are here, we failed to establish a VPN session.
+        # If we are here, we failed to establish a VPN connection.
         # Wait for a couple of seconds before terminating the session
         # to allow log writer to capture the logs
         for i in range (0, 10):
