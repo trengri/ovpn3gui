@@ -12,10 +12,10 @@ from dbus.mainloop.glib import DBusGMainLoop
 import openvpn3
 from openvpn3.constants import StatusMajor, StatusMinor
 
-gi.require_version("Gtk", "3.0")                #pylint: disable=wrong-import-position
-from gi.repository import Gtk, Gdk, GLib, Gio   #pylint: enable=wrong-import-position
+gi.require_version("Gtk", "3.0")                # pylint: disable=wrong-import-position
+from gi.repository import Gtk, Gdk, GLib, Gio   # pylint: enable=wrong-import-position
 
-MAX_LOG_SIZE = 5*1024*1024              	# 5MB
+MAX_LOG_SIZE = 5*1024*1024                      # 5MB
 
 class UserCredDialog(Gtk.Dialog):
     def __init__(self, parent, config, username):
@@ -409,18 +409,13 @@ class AppWindow(Gtk.ApplicationWindow):
             return False
 
         ok, user, password, otp = self.__get_user_creds(config)
-        if not ok:
-            return False
-
-        spinner = self.new_spinner("Connecting to " + config["config_name"] + "...")
-        ok, err_msg = self.__do_connect_vpn(config, user, password, otp)
-        spinner.destroy()
-
-        if not ok:
-            display_error(self, "Error connecting to " + config["config_name"], err_msg)
-            return False
-
-        return True
+        if ok:
+            spinner = self.new_spinner("Connecting to " + config["config_name"] + "...")
+            ok, err_msg = self.__do_connect_vpn(config, user, password, otp)
+            spinner.destroy()
+            if not ok:
+                display_error(self, "Error connecting to " + config["config_name"], err_msg)
+        return ok
 
     def __do_connect_vpn(self, config, user, password, otp):
         session = self.__new_session(config["config_path"])
