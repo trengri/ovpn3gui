@@ -3,7 +3,6 @@
 import os
 import sys
 import time
-import datetime
 import subprocess
 import json
 import gi
@@ -13,16 +12,17 @@ from dbus.mainloop.glib import DBusGMainLoop
 import openvpn3
 from openvpn3.constants import StatusMajor, StatusMinor
 
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, Gdk, GLib, Gio
+gi.require_version("Gtk", "3.0")                #pylint: disable=wrong-import-position
+from gi.repository import Gtk, Gdk, GLib, Gio   #pylint: enable=wrong-import-position
 
-MAX_LOG_SIZE = 5*1024*1024        # 5MB
+MAX_LOG_SIZE = 5*1024*1024              	# 5MB
 
 class UserCredDialog(Gtk.Dialog):
     def __init__(self, parent, config, username):
         super().__init__(title="Connect " + config["config_name"], transient_for=parent)
         self.add_buttons(
-            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK
+            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_OK, Gtk.ResponseType.OK
         )
 
         ok_button = self.get_widget_for_response(response_id=Gtk.ResponseType.OK)
@@ -80,17 +80,17 @@ class TextFileWindow(Gtk.Window):
         if event.keyval == Gdk.KEY_Escape:
             self.destroy()
 
-class SwitchWithData(Gtk.Switch):
+class SwitchWithData(Gtk.Switch):               # pylint: disable=too-few-public-methods
     def __init__(self, data):
         super().__init__()
         self.config = data
 
-class ListBoxRowWithData(Gtk.ListBoxRow):
+class ListBoxRowWithData(Gtk.ListBoxRow):       # pylint: disable=too-few-public-methods
     def __init__(self, data):
         super().__init__()
         self.config = data
 
-class EventBoxWithData(Gtk.EventBox):
+class EventBoxWithData(Gtk.EventBox):           # pylint: disable=too-few-public-methods
     def __init__(self, data):
         super().__init__()
         self.config = data
@@ -106,32 +106,21 @@ def display_error(parent: Gtk.Window, msg1: str, msg2: str):
     err_dlg.run()
     err_dlg.destroy()
 
-def get_gtk_theme_name():
-    """Get the name of the currently used GTK theme.
-    :rtype: str
-    """
+def get_gtk_theme_name() -> str:
+    """ Get the name of the currently used GTK theme. """
     settings = Gtk.Settings.get_default()
     return settings.get_property("gtk-theme-name")
 
-def set_gtk_theme_name(gtk_theme_name):
-    """Set the GTK theme to use.
-    :param str gtk_theme_name: The name of the theme to use (e.g.
-                               ``"Adwaita"``).
-    """
+def set_gtk_theme_name(gtk_theme_name: str):
+    """ Set GTK theme to use. """
     settings = Gtk.Settings.get_default()
     settings.set_property("gtk-theme-name", gtk_theme_name)
 
 def set_gtk_application_prefer_dark_theme(use_dark_theme: bool):
-    """Defines whether the dark variant of the GTK theme should be used or
-    not.
-    :param bool use_dark_theme: If ``True`` the dark variant of the theme will
-                                be used (if available).
-    """
+    """ Enable/disable dark mode. """
     settings = Gtk.Settings.get_default()
     settings.set_property("gtk-application-prefer-dark-theme", use_dark_theme)
 
-
-# This would typically be its own file
 MENU_XML = """
 <?xml version="1.0" encoding="UTF-8"?>
 <interface>
@@ -185,6 +174,7 @@ class AppWindow(Gtk.ApplicationWindow):
         import_profile_action.connect("activate", self.on_import_profile_action)
         self.add_action(import_profile_action)
 
+        # Create header bar with menu icon
         hb = Gtk.HeaderBar()
         hb.set_show_close_button(True)
         hb.props.title = "OpenVPN3"
@@ -246,11 +236,12 @@ class AppWindow(Gtk.ApplicationWindow):
     def kill_lingering_sessions(self):
         for s in self.smgr.FetchAvailableSessions():
             status = s.GetStatus()
-            if status["major"] == StatusMajor.CONNECTION and status["minor"] != StatusMinor.CONN_CONNECTED:
+            if (status["major"] == StatusMajor.CONNECTION and
+                status["minor"] != StatusMinor.CONN_CONNECTED):
                 print("Killing lingering session with status", status)
                 s.Disconnect()
 
-    def ok_to_disconnect(self) -> bool:
+    def __ok_to_disconnect(self) -> bool:
         sessions = self.smgr.FetchAvailableSessions()
         if len(sessions) > 0:
             dialog = Gtk.MessageDialog(
@@ -282,47 +273,56 @@ class AppWindow(Gtk.ApplicationWindow):
 
         listbox = Gtk.ListBox()
         listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+        # listbox.connect('row-activated', self.on_row_activated)
         self.box_outer.pack_start(listbox, True, True, 0)
 
-        label_status = Gtk.Label(label=self.get_connection_status(), xalign=0)
-        add_button = Gtk.Button.new_from_icon_name("list-add-symbolic", Gtk.IconSize.BUTTON)
-        add_button.connect("clicked", self.on_import_profile_clicked)
-        bottom_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
-        bottom_hbox.pack_start(label_status, False, False, 0)
-        bottom_hbox.pack_end(add_button, False, False, 0)
-        self.box_outer.pack_end(bottom_hbox, False, False, 0)
-
+        # Populate listbox with VPN connections (rows). Each row consists of 3 columns:
+        #   on/off switch | profile name | delete button
         for c in self.configs:
             row = ListBoxRowWithData(c)
             hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
             row.add(hbox)
 
+            # Left column: On/Off switch
             switch = SwitchWithData(c)
             switch.set_active(c["session_path"] is not None)
             switch.connect("notify::active", self.on_switch_activated)
             switch.props.valign = Gtk.Align.CENTER
             hbox.pack_start(switch, False, True, 0)
 
+            # Middle column: VPN Profile Name
+            # We need EventBox here because Gtk.Box cannot handle double-click
             evbox = EventBoxWithData(c)
             evbox.connect("button-press-event", self.vpn_profile_button_press)
             vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             evbox.add(vbox)
             hbox.pack_start(evbox, True, True, 0)
 
-            label1 = Gtk.Label(label="OpenVPN Profile", xalign=0)
-            label1.set_sensitive(False)
-            label2 = Gtk.Label(label=c["config_name"], xalign=0)
-            vbox.pack_start(label1, True, True, 0)
-            vbox.pack_start(label2, True, True, 0)
+            # Top/bottom labels in the middle column
+            top_label = Gtk.Label(label="OpenVPN Profile", xalign=0)
+            top_label.set_sensitive(False)
+            bottom_label = Gtk.Label(label=c["config_name"], xalign=0)
+            vbox.pack_start(top_label, True, True, 0)
+            vbox.pack_start(bottom_label, True, True, 0)
 
+            # Right column: Delete profile button
             button = Gtk.Button.new_from_icon_name("list-remove-symbolic", Gtk.IconSize.BUTTON)
             button.connect("clicked", self.on_delete_profile_clicked, c)
             hbox.pack_start(button, False, False, 0)
 
             listbox.add(row)
 
-#        listbox.connect('row-activated', self.on_row_activated)
-        listbox.show_all()
+        # Status line and "Add profile" button at the bottom of the window
+        label_status = Gtk.Label(label=self.get_connection_status(), xalign=0)
+        add_button = Gtk.Button.new_from_icon_name("list-add-symbolic", Gtk.IconSize.BUTTON)
+        add_button.connect("clicked", self.on_add_profile_clicked)
+
+        # Pack the status label and "Add profile" button into the horizontal box
+        bottom_hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=50)
+        bottom_hbox.pack_start(label_status, False, False, 0)
+        bottom_hbox.pack_end(add_button, False, False, 0)
+
+        self.box_outer.pack_end(bottom_hbox, False, False, 0)
 
     def show_config(self, config):
         config_text = self.cmgr.Retrieve(config["config_path"]).Fetch()
@@ -345,7 +345,8 @@ class AppWindow(Gtk.ApplicationWindow):
             if path is not None:
                 session = self.smgr.Retrieve(path)
                 s = session.GetStatus()
-                if s["major"] == StatusMajor.CONNECTION and s["minor"] == StatusMinor.CONN_CONNECTED:
+                if (s["major"] == StatusMajor.CONNECTION and
+                    s["minor"] == StatusMinor.CONN_CONNECTED):
                     status = "Connected to " + session.GetProperty("session_name")
                 else:
                     status = s["message"]
@@ -365,82 +366,74 @@ class AppWindow(Gtk.ApplicationWindow):
         return spinner_window
 
     def on_switch_activated(self, switch, _gparam):
-        GLib.timeout_add(0, self.do_switch_activated, switch)
+        GLib.timeout_add(0, self.__do_switch_activated, switch)
 
-    def do_switch_activated(self, switch: SwitchWithData):
+    def __do_switch_activated(self, switch: SwitchWithData):
         self.idle_counter = 0
         self.connect_dbus()
         if switch.get_active():
-            if switch.config["config_name"] in self.usernames:
-                saved_user = self.usernames[switch.config["config_name"]]
-            else:
-                saved_user = ""
-            if not self.ok_to_disconnect():
-                switch.set_state(False)
-                return
-            dialog = UserCredDialog(self, switch.config, saved_user)
-            response = dialog.run()
-            user = dialog.entry_name.get_text()
-            password = dialog.entry_password.get_text()
-            otp = dialog.entry_otp.get_text()
-            dialog.destroy()
-
-            if response != Gtk.ResponseType.OK:
-                switch.set_state(False)
-                return
-            if user != saved_user:
-                self.usernames[switch.config["config_name"]] = user
-                self.save_user_settings()
-
-            spinner = self.new_spinner("Connecting to " + switch.config["config_name"] + "...")
-            ok, err_msg = self.connect_vpn(switch.config, user, password, otp)
-            spinner.destroy()
-
-            if not ok:
-                display_error(self, "Error connecting to " + switch.config["config_name"], err_msg)
+            if not self.__connect_vpn(switch.config):
                 switch.set_state(False)
         else:
-            self.disconnect_vpn(switch.config)
-
-#        print(f'Switch was turned {switch.get_active()} for {switch.config["config_name"]}')
+            self.__disconnect_vpn(switch.config)
         self.redraw_win()
 
-    def connect_vpn(self, config, user, password, otp):
-        while Gtk.events_pending():
-            Gtk.main_iteration()
-        cfg = self.cmgr.Retrieve(config["config_path"])
-        session = self.smgr.NewTunnel(cfg)
+    def __get_user_creds(self, config):
+        """ Prompts the user for credentials. Saves the username.
+            Returns False if the user cancelled the dialog.
+        """
+        if config["config_name"] in self.usernames:
+            saved_user = self.usernames[config["config_name"]]
+        else:
+            saved_user = ""
+
+        dialog = UserCredDialog(self, config, saved_user)
+        response = dialog.run()
+        user = dialog.entry_name.get_text()
+        password = dialog.entry_password.get_text()
+        otp = dialog.entry_otp.get_text()
+        dialog.destroy()
+
+        if response != Gtk.ResponseType.OK:
+            return False, None, None, None
+
+        if user != saved_user:
+            self.usernames[config["config_name"]] = user
+            self.save_user_settings()
+
+        return True, user, password, otp
+
+
+    def __connect_vpn(self, config) -> bool:
+        if not self.__ok_to_disconnect():
+            return False
+
+        ok, user, password, otp = self.__get_user_creds(config)
+        if not ok:
+            return False
+
+        spinner = self.new_spinner("Connecting to " + config["config_name"] + "...")
+        ok, err_msg = self.__do_connect_vpn(config, user, password, otp)
+        spinner.destroy()
+
+        if not ok:
+            display_error(self, "Error connecting to " + config["config_name"], err_msg)
+            return False
+
+        return True
+
+    def __do_connect_vpn(self, config, user, password, otp):
+        session = self.__new_session(config["config_path"])
         print("Session D-Bus path: " + session.GetPath())
-        while Gtk.events_pending():
-            Gtk.main_iteration()
 
-#        Set up signal callback handlers and the proper log level
-#        session.LogCallback(self._LogHandler)
-#        self.__session.StatusChangeCallback(self._StatusHandler)
-
-        # Wait for the backends to settle
-        # The GetStatus() method will throw an exception
-        # if the backend is not yet ready
-        ready = False
-        while not ready:
-            while Gtk.events_pending():
-                Gtk.main_iteration()
-            try:
-                print("+ Status: " + str(session.GetStatus()))
-                ready = True
-            except dbus.exceptions.DBusException:
-                # If no status is available yet, wait and retry
-                time.sleep(1)
-                while Gtk.events_pending():
-                    Gtk.main_iteration()
-        print("Starting connection...")
-
-        # This will run in the background
-        with open(self.application.log_filename, "a") as self.f_log:
-            subprocess.Popen(["/usr/bin/openvpn3", "log", "--log-level", "6", "--session-path", session.GetPath()],
+        # Start background logging process for this session
+        with open(self.application.log_filename, "a", encoding="utf-8") as self.f_log:
+            subprocess.Popen(["/usr/bin/openvpn3", "log",
+                              "--log-level", "6",
+                              "--session-path", session.GetPath()],
                              stdout=self.f_log, stderr=self.f_log)
 
-        # Start the VPN connection
+        # Start VPN connection
         ready = False
         error_msg = None
         while not ready and not error_msg:
@@ -450,68 +443,24 @@ class AppWindow(Gtk.ApplicationWindow):
                 session.Connect()
                 ready = True
             except dbus.exceptions.DBusException as e:
-                # If this is not about user credentials missing, exit the loop
-                if str(e).find(' Missing user credentials') < 1:
+                if str(e).find('Backend VPN process is not ready') > 0:
+                    time.sleep(0.5)
+                elif str(e).find(' Missing user credentials') > 0:
+                    error_msg = self.__provide_user_creds(session, user, password, otp)
+                else:
                     error_msg = e.get_dbus_message()
-                    break
-                try:
-                    # Provide credentials to the backend
-                    for u in session.FetchUserInputSlots():
-                        # We only care about responding to credential requests here
-                        if u.GetTypeGroup()[0] != openvpn3.ClientAttentionType.CREDENTIALS:
-                            continue
-
-                        # Send information provided by the user to the backend
-                        varname = u.GetVariableName()
-                        if varname == "username":
-                            if user:
-                                u.ProvideInput(user)
-                            else:
-                                error_msg = "Username is required, but it was not provided."
-                        elif varname == "password":
-                            if password:
-                                u.ProvideInput(password)
-                            else:
-                                error_msg = "Password is required, but it was not provided."
-                        elif varname == "static_challenge":
-                            if otp:
-                                u.ProvideInput(otp)
-                            else:
-                                error_msg = "OTP Code is required, but it was not provided."
-                except dbus.exceptions.DBusException as e2:
-                    error_msg = e2.get_dbus_message()
             # Now the while-loop will ensure session.Ready() is re-run
 
         if not error_msg:
-            print("Wait 15 seconds for the backend to get a connection")
-            for i in range(1, 150):
-                if i % 10 == 0:
-                    status = session.GetStatus()
-                    if status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_CONNECTED:
-                        return True, None
-                    if status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_FAILED:
-                        error_msg = "Failed to start the connection"
-                        if status["message"]:
-                            error_msg += "\n" + status["message"]
-                        break
-                    if status["major"] == StatusMajor.CONNECTION and status["minor"] == StatusMinor.CONN_AUTH_FAILED:
-                        error_msg = "Authentication failed"
-                        break
-                    print("[%i] Status: %s" % (i, str(session.GetStatus())))
-                time.sleep(0.1)
-                while Gtk.events_pending():
-                    Gtk.main_iteration()
-            else:
-                status = session.GetStatus()
-                error_msg = "Connection timed out.\n" + str(status["major"]) + "\n" + str(status["minor"])
-                if status["message"]:
-                    error_msg += "\nMessage: " + status["message"]
+            ok, error_msg = self.__wait_for_connection(session)
+            if ok:
+                return True, None
 
         # If we are here, we failed to establish a VPN connection.
         # Wait for a couple of seconds before terminating the session
         # to allow log writer to capture the logs
-        for i in range (0, 10):
-            time.sleep(0.2)
+        for _ in range (0, 20):
+            time.sleep(0.1)
             while Gtk.events_pending():
                 Gtk.main_iteration()
 
@@ -521,66 +470,124 @@ class AppWindow(Gtk.ApplicationWindow):
         # Unfortunately, sometimes OpenVPN3 v21 segfaults here :(
         try:
             session.Disconnect()
-        except Exception as _e:
+        except Exception:
             display_error(self, "Fatal error",
-                              "Unexpected error occurred. This is typically caused by backend error,\n"
-                              "such as openvpn3 daemon segfault. Please check system log for details.\n"
-                              "Session data may be inconsistent, the application will exit now.")
+                "Unexpected error occurred. This is typically caused by backend error,\n"
+                "such as openvpn3 daemon segfault. Please check system log for details.\n"
+                "Session data may be inconsistent, the application will exit now.")
             sys.exit(1)
 
         return False, error_msg
 
-    def disconnect_vpn(self, config):
+    def __disconnect_vpn(self, config):
         s_path = config["session_path"]
         if s_path is None:
             return
         session = self.smgr.Retrieve(s_path)
         session.Disconnect()
 
+    def __new_session(self, config_path: str):
+        cfg = self.cmgr.Retrieve(config_path)
+        session = self.smgr.NewTunnel(cfg)
 
-    ##
-    #  Simple Log signal callback function.  Called each time a Log event
-    #  happens on this session.
-    #
-    def _LogHandler(self, _group, _catg, msg):
-        loglines = [l for l in msg.split('\n') if len(l) > 0]
-        if len(loglines) < 1:
-            return
+        # Wait for the backend to settle
+        for _ in range (0, 10):
+            time.sleep(0.1)
+            while Gtk.events_pending():
+                Gtk.main_iteration()
 
-        print('%s %s' % (datetime.datetime.now(), loglines[0]))
-        for line in loglines[1:]:
-            print('%s%s' % (' ' * 33, line))
+        return session
 
+    def __provide_user_creds(self, session, user, password, otp):
+        """ Provide credentials to the backend. Try and return
+            user-friendly error instead of an ugly D-Bus exception message.
+        """
+        error_msg = None
+        try:
+            for u in session.FetchUserInputSlots():
+                # We only care about responding to credential requests here
+                if u.GetTypeGroup()[0] != openvpn3.ClientAttentionType.CREDENTIALS:
+                    continue
 
-    def on_import_profile_clicked(self, _widget:Gtk.Button):
+                # Send information provided by the user to the backend
+                varname = u.GetVariableName()
+                if varname == "username":
+                    if user:
+                        u.ProvideInput(user)
+                    else:
+                        error_msg = "Username is required, but it was not provided."
+                elif varname == "password":
+                    if password:
+                        u.ProvideInput(password)
+                    else:
+                        error_msg = "Password is required, but it was not provided."
+                elif varname == "static_challenge":
+                    if otp:
+                        u.ProvideInput(otp)
+                    else:
+                        error_msg = "OTP Code is required, but it was not provided."
+        except dbus.exceptions.DBusException as e:
+            error_msg = e.get_dbus_message()
+
+        return error_msg
+
+    def __wait_for_connection(self, session):
+        print("Wait 15 seconds for the backend to get a connection")
+        for i in range(1, 150):
+            if i % 10 == 0:
+                status = session.GetStatus()
+                if (status["major"] == StatusMajor.CONNECTION and
+                    status["minor"] == StatusMinor.CONN_CONNECTED):
+                    return True, None
+                if (status["major"] == StatusMajor.CONNECTION and
+                    status["minor"] == StatusMinor.CONN_FAILED):
+                    error_msg = "Failed to start the connection"
+                    if status["message"]:
+                        error_msg += "\n" + status["message"]
+                    break
+                if (status["major"] == StatusMajor.CONNECTION and
+                    status["minor"] == StatusMinor.CONN_AUTH_FAILED):
+                    error_msg = "Authentication failed"
+                    break
+                print(f"[{i}] Status:", str(session.GetStatus()))
+            while Gtk.events_pending():
+                Gtk.main_iteration()
+            time.sleep(0.1)
+        else:
+            status = session.GetStatus()
+            error_msg = "Connection timed out.\n" + \
+                         str(status["major"]) + "\n" + str(status["minor"])
+            if status["message"]:
+                error_msg += "\nMessage: " + status["message"]
+        return False, error_msg
+
+    def on_add_profile_clicked(self, _widget:Gtk.Button):
         self.idle_counter = 0
         dialog = Gtk.FileChooserDialog(
             title="Import VPN Profile", parent=self, action=Gtk.FileChooserAction.OPEN
         )
         dialog.add_buttons(
-            Gtk.STOCK_CANCEL,
-            Gtk.ResponseType.CANCEL,
-            Gtk.STOCK_OPEN,
-            Gtk.ResponseType.OK,
+            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_OPEN, Gtk.ResponseType.OK,
         )
 
-        self.add_filters(dialog)
+        self.__add_filters(dialog)
 
         response = dialog.run()
         filename = dialog.get_filename()
         dialog.destroy()
         if response == Gtk.ResponseType.OK:
-            if self.is_valid_profile(filename):
+            if self.__is_valid_profile(filename):
                 self.connect_dbus()
-                self.import_profile(filename)
+                self.__import_profile(filename)
             else:
                 display_error(self, "Failed to import profile", "This profile is not valid.")
             self.redraw_win()
 
     def on_import_profile_action(self, _action:Gio.SimpleAction, _param):
-        self.on_import_profile_clicked(None)
+        self.on_add_profile_clicked(None)
 
-    def add_filters(self, dialog):
+    def __add_filters(self, dialog: Gtk.FileChooserDialog):
         filter_ovpn = Gtk.FileFilter()
         filter_ovpn.set_name("OpenVPN profiles")
         filter_ovpn.add_pattern("*.ovpn")
@@ -596,10 +603,10 @@ class AppWindow(Gtk.ApplicationWindow):
         filter_any.add_pattern("*")
         dialog.add_filter(filter_any)
 
-    def is_valid_profile(self, _filename):
+    def __is_valid_profile(self, _filename):
         return True
 
-    def import_profile(self, filename):
+    def __import_profile(self, filename):
         fname = os.path.splitext(os.path.basename(filename))[0]
         with open(filename, 'r', encoding="utf-8") as f:
             self.cmgr.Import(fname, f.read(), False, True)
@@ -616,7 +623,7 @@ class AppWindow(Gtk.ApplicationWindow):
         dialog.destroy()
         if response == Gtk.ResponseType.YES:
             self.connect_dbus()
-            self.disconnect_vpn(config)
+            self.__disconnect_vpn(config)
             self.cmgr.Retrieve(config["config_path"]).Remove()
             self.redraw_win()
 
@@ -648,7 +655,7 @@ class Application(Gtk.Application):
         self.settings_filename = home_dir + "/.ovpn3gui.json"
         self.log_filename = home_dir + "/ovpn3gui.log"
 
-    def do_startup(self):
+    def do_startup(self, *args, **kwargs):
         Gtk.Application.do_startup(self)
 
         action = Gio.SimpleAction.new("about", None)
@@ -671,6 +678,15 @@ class Application(Gtk.Application):
         self.add_action(action)
 
         self.rotate_log()
+
+    def do_activate(self, *args, **kwargs):
+        # We only allow a single window and raise any existing ones
+        if not self.window:
+            # Windows are associated with the application
+            # when the last one is closed the application shuts down
+            self.window = AppWindow(application=self, title="OpenVPN3")
+            self.window.show_all()
+        self.window.present()
 
     def on_change_theme(self, action: Gio.SimpleAction, value: GLib.Variant):
         action.set_state(value)
@@ -698,15 +714,6 @@ class Application(Gtk.Application):
                 win.show_all()
         else:
             display_error(self.window, "Log is empty", "There are no records in the log yet")
-
-    def do_activate(self):
-        # We only allow a single window and raise any existing ones
-        if not self.window:
-            # Windows are associated with the application
-            # when the last one is closed the application shuts down
-            self.window = AppWindow(application=self, title="OpenVPN3")
-            self.window.show_all()
-        self.window.present()
 
     def on_about(self, _action, _param):
         about_dialog = Gtk.AboutDialog(transient_for=self.window, modal=True)
