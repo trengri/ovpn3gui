@@ -20,10 +20,8 @@ MAX_LOG_SIZE = 5*1024*1024                      # 5MB
 class UserCredDialog(Gtk.Dialog):
     def __init__(self, parent, config, username):
         super().__init__(title="Connect " + config["config_name"], transient_for=parent)
-        self.add_buttons(
-            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-            Gtk.STOCK_OK, Gtk.ResponseType.OK
-        )
+        self.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                         Gtk.STOCK_OK, Gtk.ResponseType.OK)
 
         ok_button = self.get_widget_for_response(response_id=Gtk.ResponseType.OK)
         ok_button.set_can_default(True)
@@ -68,7 +66,7 @@ class TextFileWindow(Gtk.Window):
         tv.set_monospace(True)
         tv.get_buffer().set_text(text)
 
-        scrolled_window =  Gtk.ScrolledWindow()
+        scrolled_window = Gtk.ScrolledWindow()
         scrolled_window.add(tv)
 
         self.set_border_width(5)
@@ -96,12 +94,10 @@ class EventBoxWithData(Gtk.EventBox):           # pylint: disable=too-few-public
         self.config = data
 
 def display_error(parent: Gtk.Window, msg1: str, msg2: str):
-    err_dlg = Gtk.MessageDialog(
-        transient_for=parent,
-        message_type=Gtk.MessageType.ERROR,
-        buttons=Gtk.ButtonsType.OK,
-        text=msg1
-    )
+    err_dlg = Gtk.MessageDialog(transient_for=parent,
+                                message_type=Gtk.MessageType.ERROR,
+                                buttons=Gtk.ButtonsType.OK,
+                                text=msg1)
     err_dlg.format_secondary_text(msg2)
     err_dlg.run()
     err_dlg.destroy()
@@ -214,8 +210,7 @@ class AppWindow(Gtk.ApplicationWindow):
             { "config_name":  c.GetConfigName(),
               "config_path":  c.GetPath(),
               "session_path": None
-            } for c in self.cmgr.FetchAvailableConfigs()
-        ]
+            } for c in self.cmgr.FetchAvailableConfigs()]
 
         for s in self.smgr.FetchAvailableSessions():
             conf_name = s.GetProperty("config_name")
@@ -229,9 +224,11 @@ class AppWindow(Gtk.ApplicationWindow):
                     break
             if not attached:
                 print("Attaching stale session", conf_name)
-                self.configs.append({"config_name": conf_name,
-                                     "config_path": conf_path,
-                                     "session_path": sess_path})
+                self.configs.append({
+                    "config_name": conf_name,
+                    "config_path": conf_path,
+                    "session_path": sess_path
+                })
 
     def kill_lingering_sessions(self):
         for s in self.smgr.FetchAvailableSessions():
@@ -354,10 +351,10 @@ class AppWindow(Gtk.ApplicationWindow):
         return status
 
     def new_spinner(self, text: str) -> Gtk.MessageDialog:
-        spinner_window = Gtk.MessageDialog(transient_for = self,
+        spinner_window = Gtk.MessageDialog(transient_for=self,
                                            modal=True,
                                            destroy_with_parent=True,
-                                           text = text)
+                                           text=text)
         box_content_area = spinner_window.get_content_area()
         spinner = Gtk.Spinner()
         box_content_area.add(spinner)
@@ -402,7 +399,6 @@ class AppWindow(Gtk.ApplicationWindow):
             self.save_user_settings()
 
         return True, user, password, otp
-
 
     def __connect_vpn(self, config) -> bool:
         if not self.__ok_to_disconnect():
@@ -454,7 +450,7 @@ class AppWindow(Gtk.ApplicationWindow):
         # If we are here, we failed to establish a VPN connection.
         # Wait for a couple of seconds before terminating the session
         # to allow log writer to capture the logs
-        for _ in range (0, 20):
+        for _ in range(0, 20):
             time.sleep(0.1)
             while Gtk.events_pending():
                 Gtk.main_iteration()
@@ -486,7 +482,7 @@ class AppWindow(Gtk.ApplicationWindow):
         session = self.smgr.NewTunnel(cfg)
 
         # Wait for the backend to settle
-        for _ in range (0, 10):
+        for _ in range(0, 10):
             time.sleep(0.1)
             while Gtk.events_pending():
                 Gtk.main_iteration()
@@ -556,15 +552,13 @@ class AppWindow(Gtk.ApplicationWindow):
                 error_msg += "\nMessage: " + status["message"]
         return False, error_msg
 
-    def on_add_profile_clicked(self, _widget:Gtk.Button):
+    def on_add_profile_clicked(self, _widget: Gtk.Button):
         self.idle_counter = 0
-        dialog = Gtk.FileChooserDialog(
-            title="Import VPN Profile", parent=self, action=Gtk.FileChooserAction.OPEN
-        )
-        dialog.add_buttons(
-            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-            Gtk.STOCK_OPEN, Gtk.ResponseType.OK,
-        )
+        dialog = Gtk.FileChooserDialog(title="Import VPN Profile",
+                                       parent=self,
+                                       action=Gtk.FileChooserAction.OPEN)
+        dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                           Gtk.STOCK_OPEN, Gtk.ResponseType.OK)
 
         self.__add_filters(dialog)
 
@@ -579,7 +573,7 @@ class AppWindow(Gtk.ApplicationWindow):
                 display_error(self, "Failed to import profile", "This profile is not valid.")
             self.redraw_win()
 
-    def on_import_profile_action(self, _action:Gio.SimpleAction, _param):
+    def on_import_profile_action(self, _action: Gio.SimpleAction, _param):
         self.on_add_profile_clicked(None)
 
     def __add_filters(self, dialog: Gtk.FileChooserDialog):
@@ -666,9 +660,9 @@ class Application(Gtk.Application):
         self.add_action(action)
 
         theme_variant = GLib.Variant.new_string("System default")
-        action = Gio.SimpleAction.new_stateful(
-            "change-theme", theme_variant.get_type(), theme_variant
-        )
+        action = Gio.SimpleAction.new_stateful("change-theme",
+                                               theme_variant.get_type(),
+                                               theme_variant)
         action.connect("change-state", self.on_change_theme)
         self.add_action(action)
 
@@ -717,12 +711,12 @@ class Application(Gtk.Application):
         about_dialog.set_copyright      ("(c) 2023 trengri")
         about_dialog.set_comments       ("Inspired by OpenVPN Connect client")
         about_dialog.set_license        ("GPLv3")
-        about_dialog.set_website        ('https://github.com/trengri/ovpn3gui')
+        about_dialog.set_website        ("https://github.com/trengri/ovpn3gui")
         about_dialog.set_website_label  ("GitHub")
         about_dialog.set_authors        (["trengri"])
         about_dialog.set_documenters    (["Nobody"])
         about_dialog.set_artists        (["Nobody"])
-        about_dialog.set_logo_icon_name ('network-transmit-receive')
+        about_dialog.set_logo_icon_name ("network-transmit-receive")
         about_dialog.set_program_name   ("OpenVPN3 Linux Frontend")
         about_dialog.present()
 
