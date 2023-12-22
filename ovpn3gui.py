@@ -283,6 +283,7 @@ class AppWindow(Gtk.ApplicationWindow):
             # Left column: On/Off switch
             switch = SwitchWithData(c)
             switch.set_active(c["session_path"] is not None)
+            switch.set_tooltip_text("Connect/Disconnect")
             switch.connect("notify::active", self.on_switch_activated)
             switch.props.valign = Gtk.Align.CENTER
             hbox.pack_start(switch, False, True, 0)
@@ -304,6 +305,7 @@ class AppWindow(Gtk.ApplicationWindow):
 
             # Right column: Delete profile button
             button = Gtk.Button.new_from_icon_name("list-remove-symbolic", Gtk.IconSize.BUTTON)
+            button.set_tooltip_text("Delete Profile")
             button.connect("clicked", self.on_delete_profile_clicked, c)
             hbox.pack_start(button, False, False, 0)
 
@@ -312,6 +314,7 @@ class AppWindow(Gtk.ApplicationWindow):
         # Status line and "Add profile" button at the bottom of the window
         label_status = Gtk.Label(label=self.get_connection_status(), xalign=0)
         add_button = Gtk.Button.new_from_icon_name("list-add-symbolic", Gtk.IconSize.BUTTON)
+        add_button.set_tooltip_text("Import Profile")
         add_button.connect("clicked", self.on_add_profile_clicked)
 
         # Pack the status label and "Add profile" button into the horizontal box
