@@ -112,6 +112,11 @@ def set_gtk_theme_name(gtk_theme_name: str):
     settings = Gtk.Settings.get_default()
     settings.set_property("gtk-theme-name", gtk_theme_name)
 
+def gnome_dark_mode_enabled() -> bool:
+    """ Returns True if Dark Mode is enabled in GNOME. """
+    settings = Gio.Settings.new('org.gnome.desktop.interface')
+    return settings.get_string('color-scheme') == "prefer-dark"
+
 def set_gtk_application_prefer_dark_theme(use_dark_theme: bool):
     """ Enable/disable dark mode. """
     settings = Gtk.Settings.get_default()
@@ -132,16 +137,16 @@ MENU_XML = """
       </item>
     </section>
     <section>
-      <attribute name="label" translatable="yes">Theme</attribute>
+      <attribute name="label" translatable="yes">Appearance</attribute>
       <item>
         <attribute name="action">app.change-theme</attribute>
         <attribute name="target">light</attribute>
-        <attribute name="label" translatable="yes">Light style</attribute>
+        <attribute name="label" translatable="yes">Light theme</attribute>
       </item>
       <item>
         <attribute name="action">app.change-theme</attribute>
         <attribute name="target">dark</attribute>
-        <attribute name="label" translatable="yes">Dark style</attribute>
+        <attribute name="label" translatable="yes">Dark theme</attribute>
       </item>
     </section>
     <section>
@@ -169,6 +174,9 @@ class AppWindow(Gtk.ApplicationWindow):
         import_profile_action = Gio.SimpleAction.new("import-profile", None)
         import_profile_action.connect("activate", self.on_import_profile_action)
         self.add_action(import_profile_action)
+
+        # Tweak CSS for better appearance in Dark Mode
+        self.__load_custom_css()
 
         # Create header bar with menu icon
         hb = Gtk.HeaderBar()
@@ -199,6 +207,19 @@ class AppWindow(Gtk.ApplicationWindow):
         self.idle_counter = 0
         # Increment idle counter every minute
         self.timeout_id = GLib.timeout_add_seconds(60, self.auto_exit, None)
+
+    def __load_custom_css(self):
+        """ Gtk.Switch inside Gtk.Listbox is not quite readable on some themes
+            in Dark Mode. Make listbox transparent to workaround it.
+        """
+        screen = Gdk.Screen.get_default()
+        provider = Gtk.CssProvider()
+        style_context = Gtk.StyleContext()
+        style_context.add_provider_for_screen(
+            screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+        css = b"list { background: transparent; }"
+        provider.load_from_data(css)
 
     # Connect to the configuration and session manager
     def connect_dbus(self):
@@ -650,6 +671,10 @@ class Application(Gtk.Application):
     def do_startup(self, *args, **kwargs):
         Gtk.Application.do_startup(self)
 
+        set_gtk_theme_name(get_gtk_theme_name())
+        if gnome_dark_mode_enabled():
+            set_gtk_application_prefer_dark_theme(True)
+
         action = Gio.SimpleAction.new("about", None)
         action.connect("activate", self.on_about)
         self.add_action(action)
@@ -732,11 +757,6 @@ if __name__ == "__main__":
     mainloop = GLib.MainLoop()
     dbusloop = DBusGMainLoop(set_as_default=True)
     sysbus = dbus.SystemBus(mainloop=dbusloop)
-
-    set_gtk_theme_name(get_gtk_theme_name())
-    #gs = Gio.Settings.new('org.gnome.desktop.interface')
-    #if (gs.get_string('color-scheme') == 'prefer-dark'):
-    #  set_gtk_application_prefer_dark_theme(True)
 
     app = Application()
     app.run(sys.argv)
