@@ -9,15 +9,16 @@ import gi
 import dbus
 from dbus.mainloop.glib import DBusGMainLoop
 
-import openvpn3
-from openvpn3.constants import StatusMajor, StatusMinor
-
 gi.require_version("Gtk", "3.0")                # pylint: disable=wrong-import-position
 from gi.repository import Gtk, Gdk, GLib, Gio   # pylint: enable=wrong-import-position
+
+import openvpn3
+from openvpn3.constants import StatusMajor, StatusMinor
 
 MAX_LOG_SIZE = 5*1024*1024                      # 5MB
 
 class UserCredDialog(Gtk.Dialog):
+    """ A dialog that prompts the user for username/password/OTP credentials. """
     def __init__(self, parent, config, username):
         super().__init__(title="Connect " + config["config_name"], transient_for=parent)
         self.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
@@ -36,28 +37,31 @@ class UserCredDialog(Gtk.Dialog):
         label_password = Gtk.Label(label="Passsword:", xalign=0)
         label_otp = Gtk.Label(label="OTP code:", xalign=0)
 
-        self.entry_name = Gtk.Entry()
-        self.entry_password = Gtk.Entry()
-        self.entry_password.set_visibility(False)
-        self.entry_otp = Gtk.Entry()
-        self.entry_otp.set_activates_default(True)
+        self.name = Gtk.Entry()
+        self.password = Gtk.Entry()
+        self.otp = Gtk.Entry()
+        self.password.set_visibility(False)
+        self.otp.set_activates_default(True)
 
         grid = Gtk.Grid(column_homogeneous=False, column_spacing=50, row_spacing=10)
-        grid.attach(label_name,          0, 0, 1, 1)
-        grid.attach(label_password,      0, 1, 1, 1)
-        grid.attach(label_otp,           0, 2, 1, 1)
-        grid.attach(self.entry_name,     1, 0, 1, 1)
-        grid.attach(self.entry_password, 1, 1, 1, 1)
-        grid.attach(self.entry_otp,      1, 2, 1, 1)
+        grid.attach(label_name,     0, 0, 1, 1)
+        grid.attach(label_password, 0, 1, 1, 1)
+        grid.attach(label_otp,      0, 2, 1, 1)
+        grid.attach(self.name,      1, 0, 1, 1)
+        grid.attach(self.password,  1, 1, 1, 1)
+        grid.attach(self.otp,       1, 2, 1, 1)
 
         box.add(grid)
 
         if username:
-            self.entry_name.set_text(username)
-            self.entry_password.grab_focus()
+            self.name.set_text(username)
+            self.password.grab_focus()
         self.show_all()
 
 class TextFileWindow(Gtk.Window):
+    """ Non-modal window to display a contents of a text file with a scroller.
+        Used to view OpenVPN configs and logs.
+    """
     def __init__(self, title: str, text: str):
         super().__init__(title=title)
 
@@ -102,6 +106,13 @@ def display_error(parent: Gtk.Window, msg1: str, msg2: str):
     err_dlg.run()
     err_dlg.destroy()
 
+def flush_gtk_events():
+    """ Handle GTK events. Used to run spinner animation and to prevent
+        "Application is not reposponding" message during connection.
+    """
+    while Gtk.events_pending():
+        Gtk.main_iteration()
+
 def get_gtk_theme_name() -> str:
     """ Get the name of the currently used GTK theme. """
     settings = Gtk.Settings.get_default()
@@ -118,7 +129,7 @@ def gnome_dark_mode_enabled() -> bool:
     return settings.get_string('color-scheme') == "prefer-dark"
 
 def set_gtk_application_prefer_dark_theme(use_dark_theme: bool):
-    """ Enable/disable dark mode. """
+    """ Enable/disable dark mode for the application. """
     settings = Gtk.Settings.get_default()
     settings.set_property("gtk-application-prefer-dark-theme", use_dark_theme)
 
@@ -128,7 +139,7 @@ MENU_XML = """
   <menu id="app-menu">
     <section>
       <item>
-        <attribute name="action">win.import-profile</attribute>
+        <attribute name="action">app.import-profile</attribute>
         <attribute name="label" translatable="yes">Import Profile</attribute>
       </item>
       <item>
@@ -166,32 +177,17 @@ MENU_XML = """
 
 
 class AppWindow(Gtk.ApplicationWindow):
+    """ Main application window. """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.application = kwargs["application"]
 
-        # This will be in the windows group and have the "win" prefix
-        import_profile_action = Gio.SimpleAction.new("import-profile", None)
-        import_profile_action.connect("activate", self.on_import_profile_action)
-        self.add_action(import_profile_action)
+        hb = self.__create_header_bar()
+        self.set_titlebar(hb)
 
         # Tweak CSS for better appearance in Dark Mode
         self.__load_custom_css()
-
-        # Create header bar with menu icon
-        hb = Gtk.HeaderBar()
-        hb.set_show_close_button(True)
-        hb.props.title = "OpenVPN3"
-        self.set_titlebar(hb)
-
-        button = Gtk.MenuButton()
-        image = Gtk.Image.new_from_icon_name("open-menu-symbolic", Gtk.IconSize.MENU)
-        button.add(image)
-
-        builder = Gtk.Builder.new_from_string(MENU_XML, -1)
-        button.set_menu_model(builder.get_object("app-menu"))
-
-        hb.pack_start(button)
 
         self.configs = []
         self.usernames = {}
@@ -205,8 +201,25 @@ class AppWindow(Gtk.ApplicationWindow):
         self.load_connections()
         self.draw_win()
         self.idle_counter = 0
-        # Increment idle counter every minute
+        # Setup timer to increment idle counter every minute
         self.timeout_id = GLib.timeout_add_seconds(60, self.auto_exit, None)
+
+    def __create_header_bar(self) -> Gtk.HeaderBar:
+        """ Create window header bar with menu icon in it"""
+
+        button = Gtk.MenuButton()
+        image = Gtk.Image.new_from_icon_name("open-menu-symbolic", Gtk.IconSize.MENU)
+        button.add(image)
+
+        builder = Gtk.Builder.new_from_string(MENU_XML, -1)
+        button.set_menu_model(builder.get_object("app-menu"))
+
+        hb = Gtk.HeaderBar()
+        hb.set_show_close_button(True)
+        hb.props.title = "OpenVPN3"
+        hb.pack_start(button)
+
+        return hb
 
     def __load_custom_css(self):
         """ Gtk.Switch inside Gtk.Listbox is not quite readable on some themes
@@ -221,18 +234,25 @@ class AppWindow(Gtk.ApplicationWindow):
         css = b"list { background: transparent; }"
         provider.load_from_data(css)
 
-    # Connect to the configuration and session manager
     def connect_dbus(self):
+        """ Connect to the configuration and session manager. """
         self.cmgr = openvpn3.ConfigurationManager(sysbus)
         self.smgr = openvpn3.SessionManager(sysbus)
 
     def load_connections(self):
+        """ Fetch Session and Config objects from OpenVPN3
+            and combine them to form a connection list.
+        """
         self.configs = [
             { "config_name":  c.GetConfigName(),
               "config_path":  c.GetPath(),
               "session_path": None
             } for c in self.cmgr.FetchAvailableConfigs()]
 
+        # Relate Configs to Sessions. Note that there is no 1:1 relation.
+        # A config can have multiple sessions and a session can exist
+        # without a config if config was deleted. We handle such cases
+        # by adding these stale sessions to the connection list.
         for s in self.smgr.FetchAvailableSessions():
             conf_name = s.GetProperty("config_name")
             conf_path = s.GetProperty("config_path")
@@ -270,11 +290,10 @@ class AppWindow(Gtk.ApplicationWindow):
             )
             response = dialog.run()
             dialog.destroy()
-            if response == Gtk.ResponseType.YES:
-                for s in sessions:
-                    s.Disconnect()
-            else:
+            if response != Gtk.ResponseType.YES:
                 return False
+            for s in sessions:
+                s.Disconnect()
         return True
 
     def redraw_win(self):
@@ -386,7 +405,7 @@ class AppWindow(Gtk.ApplicationWindow):
         spinner_window.show_all()
         return spinner_window
 
-    def on_switch_activated(self, switch, _gparam):
+    def on_switch_activated(self, switch: SwitchWithData, _gparam):
         GLib.timeout_add(0, self.__do_switch_activated, switch)
 
     def __do_switch_activated(self, switch: SwitchWithData):
@@ -410,9 +429,9 @@ class AppWindow(Gtk.ApplicationWindow):
 
         dialog = UserCredDialog(self, config, saved_user)
         response = dialog.run()
-        user = dialog.entry_name.get_text()
-        password = dialog.entry_password.get_text()
-        otp = dialog.entry_otp.get_text()
+        user = dialog.name.get_text()
+        password = dialog.password.get_text()
+        otp = dialog.otp.get_text()
         dialog.destroy()
 
         if response != Gtk.ResponseType.OK:
@@ -466,8 +485,10 @@ class AppWindow(Gtk.ApplicationWindow):
                     error_msg = e.get_dbus_message()
             # Now the while-loop will ensure session.Ready() is re-run
 
+        # Wait 15 seconds max for the backend to get a connection
+        # If connection is established, return immediately
         if not error_msg:
-            ok, error_msg = self.__wait_for_connection(session)
+            ok, error_msg = self.__wait_for_connection(session, 15)
             if ok:
                 return True, None
 
@@ -476,8 +497,7 @@ class AppWindow(Gtk.ApplicationWindow):
         # to allow log writer to capture the logs
         for _ in range(0, 20):
             time.sleep(0.1)
-            while Gtk.events_pending():
-                Gtk.main_iteration()
+            flush_gtk_events()
 
         # Perform cleanup
         # Session manager is still trying to establish the session in the background
@@ -508,14 +528,13 @@ class AppWindow(Gtk.ApplicationWindow):
         # Wait for the backend to settle
         for _ in range(0, 10):
             time.sleep(0.1)
-            while Gtk.events_pending():
-                Gtk.main_iteration()
+            flush_gtk_events()
 
         return session
 
     def __provide_user_creds(self, session, user, password, otp):
-        """ Provide credentials to the backend. Try and return
-            user-friendly error instead of an ugly D-Bus exception message.
+        """ Provide credentials to the backend. Try and return user-friendly
+            error instead of an ugly D-Bus exception message.
         """
         error_msg = None
         try:
@@ -546,9 +565,12 @@ class AppWindow(Gtk.ApplicationWindow):
 
         return error_msg
 
-    def __wait_for_connection(self, session):
-        print("Wait 15 seconds for the backend to get a connection")
-        for i in range(1, 150):
+    def __wait_for_connection(self, session, seconds):
+        """ Wait for the number of seconds for the backend to get a connection.
+            Process GTK events every 100ms (1/10 of second) to run spinner animation.
+            Check the status every second and return as soon as connection is established.
+        """
+        for i in range(1, seconds*10):
             if i % 10 == 0:
                 status = session.GetStatus()
                 if (status["major"] == StatusMajor.CONNECTION and
@@ -565,8 +587,7 @@ class AppWindow(Gtk.ApplicationWindow):
                     error_msg = "Authentication failed"
                     break
                 print(f"[{i}] Status:", str(session.GetStatus()))
-            while Gtk.events_pending():
-                Gtk.main_iteration()
+            flush_gtk_events()
             time.sleep(0.1)
         else:
             status = session.GetStatus()
@@ -597,10 +618,8 @@ class AppWindow(Gtk.ApplicationWindow):
                 display_error(self, "Failed to import profile", "This profile is not valid.")
             self.redraw_win()
 
-    def on_import_profile_action(self, _action: Gio.SimpleAction, _param):
-        self.on_add_profile_clicked(None)
-
     def __add_filters(self, dialog: Gtk.FileChooserDialog):
+        """ Add filename filters to the FileChooserDialog. """
         filter_ovpn = Gtk.FileFilter()
         filter_ovpn.set_name("OpenVPN profiles")
         filter_ovpn.add_pattern("*.ovpn")
@@ -616,13 +635,19 @@ class AppWindow(Gtk.ApplicationWindow):
         filter_any.add_pattern("*")
         dialog.add_filter(filter_any)
 
-    def __is_valid_profile(self, _filename):
-        return True
-
-    def __import_profile(self, filename):
-        fname = os.path.splitext(os.path.basename(filename))[0]
+    def __is_valid_profile(self, filename: str) -> bool:
+        """ Sanity check of the OpenVPN profile. """
+        # OpenVPN3 does not perform any profile validation and allows
+        # to import arbitrary data, so we have to do some minimal check
         with open(filename, 'r', encoding="utf-8") as f:
-            self.cmgr.Import(fname, f.read(), False, True)
+            if "remote" in f.read():
+                return True
+        return False
+
+    def __import_profile(self, filename: str):
+        profile_name = os.path.splitext(os.path.basename(filename))[0]
+        with open(filename, 'r', encoding="utf-8") as f:
+            self.cmgr.Import(profile_name, f.read(), False, True)
 
     def on_delete_profile_clicked(self, _button, config):
         self.idle_counter = 0
@@ -667,6 +692,7 @@ class Application(Gtk.Application):
         home_dir = os.path.expanduser("~")
         self.settings_filename = home_dir + "/.ovpn3gui.json"
         self.log_filename = home_dir + "/ovpn3gui.log"
+        self.old_log_filename = self.log_filename + '.old'
 
     def do_startup(self, *args, **kwargs):
         Gtk.Application.do_startup(self)
@@ -674,6 +700,10 @@ class Application(Gtk.Application):
         set_gtk_theme_name(get_gtk_theme_name())
         if gnome_dark_mode_enabled():
             set_gtk_application_prefer_dark_theme(True)
+
+        action = Gio.SimpleAction.new("import-profile", None)
+        action.connect("activate", self.on_import_profile)
+        self.add_action(action)
 
         action = Gio.SimpleAction.new("about", None)
         action.connect("activate", self.on_about)
@@ -705,6 +735,10 @@ class Application(Gtk.Application):
             self.window.show_all()
         self.window.present()
 
+    def on_import_profile(self, _action: Gio.SimpleAction, _param):
+        if self.window:
+            self.window.on_add_profile_clicked(None)
+
     def on_change_theme(self, action: Gio.SimpleAction, value: GLib.Variant):
         action.set_state(value)
         if value.get_string() == "light":
@@ -716,14 +750,14 @@ class Application(Gtk.Application):
         if os.path.exists(self.log_filename):
             file_stat = os.stat(self.log_filename)
             if file_stat.st_size > MAX_LOG_SIZE:
-                os.rename(self.log_filename, self.log_filename + '.old')
+                os.rename(self.log_filename, self.old_log_filename)
 
     def on_view_log(self, _action, _param):
         log = None
         if os.path.exists(self.log_filename):
             log = self.log_filename
-        elif os.path.exists(self.log_filename + '.old'):
-            log = self.log_filename + '.old'
+        elif os.path.exists(self.old_log_filename):
+            log = self.old_log_filename
 
         if log:
             with open(log, 'r', encoding="utf-8") as f:
