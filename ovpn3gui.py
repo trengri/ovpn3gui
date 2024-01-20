@@ -82,6 +82,34 @@ class TextFileWindow(Gtk.Window):
         if event.keyval == Gdk.KEY_Escape:
             self.destroy()
 
+class SpinnerWindow(Gtk.MessageDialog):
+    """ Modal window with a spinner and a status message to indicate connection progress.
+        The user can press Esc to cancel connection.
+    """
+    def __init__(self, parent, text):
+        super().__init__(transient_for=parent,
+                         modal=True,
+                         destroy_with_parent=True,
+                         text=text)
+        spinner = Gtk.Spinner()
+        box = self.get_content_area()
+        box.add(spinner)
+        spinner.start()
+        self.cancelled_by_user = False
+        self.connect("delete_event", self.on_delete_event)
+        self.show_all()
+
+    def on_delete_event(self, _window: Gtk.Window, _event: Gdk.Event) -> bool:
+        """ GDK_DELETE event is sent when a window manager has requested
+            to close the window, usually when the user pressed Esc.
+        """
+        self.cancelled_by_user = True
+        self.props.text = "Terminating..."
+
+        # Return True to prevent the window from being closed
+        # and allow for graceful connection shutdown
+        return True
+
 class SwitchWithData(Gtk.Switch):               # pylint: disable=too-few-public-methods
     def __init__(self, data):
         super().__init__()
@@ -393,18 +421,6 @@ class AppWindow(Gtk.ApplicationWindow):
                 break
         return status
 
-    def new_spinner(self, text: str) -> Gtk.MessageDialog:
-        spinner_window = Gtk.MessageDialog(transient_for=self,
-                                           modal=True,
-                                           destroy_with_parent=True,
-                                           text=text)
-        box_content_area = spinner_window.get_content_area()
-        spinner = Gtk.Spinner()
-        box_content_area.add(spinner)
-        spinner.start()
-        spinner_window.show_all()
-        return spinner_window
-
     def on_switch_activated(self, switch: SwitchWithData, _gparam):
         GLib.timeout_add(0, self.__do_switch_activated, switch)
 
@@ -449,14 +465,16 @@ class AppWindow(Gtk.ApplicationWindow):
 
         ok, user, password, otp = self.__get_user_creds(config)
         if ok:
-            spinner = self.new_spinner("Connecting to " + config["config_name"] + "...")
-            ok, err_msg = self.__do_connect_vpn(config, user, password, otp)
+            spinner = SpinnerWindow(self, "Connecting to " + config["config_name"] + "...")
+            ok, err_msg = self.__do_connect_vpn(config, spinner, user, password, otp)
             spinner.destroy()
+            if spinner.cancelled_by_user:
+                return False
             if not ok:
                 display_error(self, "Error connecting to " + config["config_name"], err_msg)
         return ok
 
-    def __do_connect_vpn(self, config, user, password, otp):
+    def __do_connect_vpn(self, config, spinner, user, password, otp):
         session = self.__new_session(config["config_path"])
         print("Session D-Bus path: " + session.GetPath())
 
@@ -488,16 +506,17 @@ class AppWindow(Gtk.ApplicationWindow):
         # Wait 15 seconds max for the backend to get a connection
         # If connection is established, return immediately
         if not error_msg:
-            ok, error_msg = self.__wait_for_connection(session, 15)
+            ok, error_msg = self.__wait_for_connection(session, spinner, 15)
             if ok:
                 return True, None
 
         # If we are here, we failed to establish a VPN connection.
         # Wait for a couple of seconds before terminating the session
         # to allow log writer to capture the logs
-        for _ in range(0, 20):
-            time.sleep(0.1)
-            flush_gtk_events()
+        if not spinner.cancelled_by_user:
+            for _ in range(0, 20):
+                time.sleep(0.1)
+                flush_gtk_events()
 
         # Perform cleanup
         # Session manager is still trying to establish the session in the background
@@ -565,8 +584,8 @@ class AppWindow(Gtk.ApplicationWindow):
 
         return error_msg
 
-    def __wait_for_connection(self, session, seconds):
-        """ Wait for the number of seconds for the backend to get a connection.
+    def __wait_for_connection(self, session, spinner, seconds):
+        """ Wait for the specified number of seconds for the backend to get a connection.
             Process GTK events every 100ms (1/10 of second) to run spinner animation.
             Check the status every second and return as soon as connection is established.
         """
@@ -589,6 +608,8 @@ class AppWindow(Gtk.ApplicationWindow):
                 print(f"[{i}] Status:", str(session.GetStatus()))
             flush_gtk_events()
             time.sleep(0.1)
+            if spinner.cancelled_by_user:
+                return False, None
         else:
             status = session.GetStatus()
             error_msg = "Connection timed out.\n" + \
