@@ -4,7 +4,7 @@
 * Supports multiple OpenVPN profiles
 * Supports OTP static challenge authentication
 * Lightweight GTK3 interface, looks similar to macOS/Windows OpenVPN Connect client
-* Uses OpenVPN3 frontend API instead of calling `openvpn3 session-start`, `openvpn3 config-import` programs
+* Uses OpenVPN3 frontend API instead of calling `openvpn3 session-start`, `openvpn3 config-import` commands
 
 ## Screenshots
 ![изображение](https://github.com/trengri/ovpn3gui/assets/53753844/c9dc85e2-c57e-45fc-bb53-b7a23b77cd82)
