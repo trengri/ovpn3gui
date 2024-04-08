@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+# -*- coding: utf-8 -*-
 
 import os
 import sys
@@ -44,9 +45,9 @@ class PersistentDict:
             json.dump(self.__data, f, indent=4)
 
 class UserCreds(Gtk.Dialog):
-    """ Holds user credentials (username, password, OTP).
-        Usernames are saved persistently per connection in a JSON file.
+    """ Represents user credentials (username, password, OTP).
         Can interact with the user and prompt credentials with a modal dialog.
+        Usernames are saved persistently per connection in a JSON file.
     """
     def __init__(self, parent: Gtk.Window, config_name: str, saved_usernames: PersistentDict):
         super().__init__(title="Connect " + config_name, transient_for=parent)
@@ -90,7 +91,7 @@ class UserCreds(Gtk.Dialog):
         box.add(grid)
 
     def ask_user_creds(self) -> bool:
-        """ Prompts the user for credentials. Saves the username.
+        """ Runs modal dialog to prompt the user for credentials.
             Returns False if the user has cancelled the dialog.
         """
         saved_user = self.saved_usernames[self.config_name]
@@ -236,8 +237,12 @@ class AppWindow(Gtk.ApplicationWindow):
 
         self.configs = []
         self.f_log = None
-        home_dir = os.path.expanduser("~")
-        self.__saved_usernames = PersistentDict(os.path.join(home_dir, ".ovpn3gui.json"))
+
+        data_dir = os.path.join(GLib.get_user_data_dir(), 'ovpn3gui')
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir, mode=0o700)
+        self.__saved_usernames = PersistentDict(os.path.join(data_dir, "usernames.json"))
+
         self.set_border_width(10)
         self.set_default_size(300, 400)
         self.set_resizable(False)
@@ -835,4 +840,5 @@ if __name__ == "__main__":
     sysbus = dbus.SystemBus(mainloop=dbusloop)
 
     app = Application()
-    app.run(sys.argv)
+    exit_code = app.run(sys.argv)
+    sys.exit(exit_code)
